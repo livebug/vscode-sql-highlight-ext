@@ -1,0 +1,42 @@
+{
+  "name": "sql-dialect-highlight",
+  "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
+  "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮",
+  "version": "0.1.0",
+  "publisher": "sql-dialect-publisher",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sql-tdh",
+        "aliases": ["SQL (TDH)", "tdh-sql", "Transwarp SQL"],
+        "extensions": [".tdhsql", ".tdh.sql"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "sql-gaussdb",
+        "aliases": ["SQL (GaussDB)", "gaussdb-sql", "GaussDB SQL"],
+        "extensions": [".gaussql", ".gauss.sql"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sql-tdh",
+        "scopeName": "source.sql.tdh",
+        "path": "./syntaxes/sql-tdh.tmLanguage.json"
+      },
+      {
+        "language": "sql-gaussdb",
+        "scopeName": "source.sql.gaussdb",
+        "path": "./syntaxes/sql-gaussdb.tmLanguage.json"
+      }
+    ]
+  }
+}

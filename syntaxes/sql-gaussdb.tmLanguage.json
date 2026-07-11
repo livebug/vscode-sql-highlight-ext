@@ -1,0 +1,170 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL (GaussDB)",
+  "scopeName": "source.sql.gaussdb",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#gaussdb-keywords" },
+    { "include": "#sql-keywords" },
+    { "include": "#gaussdb-functions" },
+    { "include": "#sql-functions" },
+    { "include": "#gaussdb-types" },
+    { "include": "#sql-types" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.sql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.sql",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.constant.sql",
+          "match": "\\$\\{[a-zA-Z_][a-zA-Z0-9_]*\\}"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.sql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.sql", "match": "''" },
+            { "include": "#variables" }
+          ]
+        },
+        {
+          "name": "string.quoted.double.sql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#variables" }
+          ]
+        },
+        {
+          "name": "string.quoted.dollar.sql",
+          "begin": "\\$[a-zA-Z_]*\\$",
+          "end": "\\$[a-zA-Z_]*\\$",
+          "patterns": [
+            { "include": "#variables" }
+          ]
+        },
+        {
+          "name": "string.quoted.escape.sql",
+          "match": "(?i)E'([^'\\\\]|\\\\.)*'",
+          "patterns": [
+            { "include": "#variables" }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.sql",
+          "match": "\\b(\\d+(\\.\\d+)?([eE][+-]?\\d+)?)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.sql",
+          "match": "(::|<>|<=|>=|!=|=|<|>|\\+|\\-|\\*|/|%|\\|\\||&&|@>|<@|\\?|\\?\\||\\?&|#-|@|@@)"
+        }
+      ]
+    },
+    "gaussdb-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.gaussdb.sql",
+          "match": "(?i)\\b(DISTRIBUTE\\s+BY|DISTRIBUTION|REPLICATION|HASH|RANGE|LIST|MODULO|ROBIN|NOLOGGING|COMPRESS|NOCOMPRESS|TABLESPACE|STORAGE|WITH\\s+\\(\\s*ORIENTATION|ORIENTATION|ROW|COLUMN|PARTITION\\s+BY|SUBPARTITION|PARTITION|SUBPARTITION\\s+BY|VALUES\\s+IN|VALUES\\s+LESS\\s+THAN|START\\s+END|EVERY|MAXVALUE|TABLESPACE|ENABLE\\s+ROW\\s+MOVEMENT|DISABLE\\s+ROW\\s+MOVEMENT|AUTOMAPPED|RELPERSISTENCE|DELTAROW_THRESHOLD|PCTFREE|INITRANS|MAXTRANS|COMPRESS|BASIC|OLTP|ADVANCED|SEGMENT\\s+CREATION|RETENTION|PCTVERSION|ENABLE|DISABLE|CACHE|NOCACHE|LOGGING|NOLOGGING|FILESYSTEM|PARALLEL|NOPARALLEL|MONITORING|NOMONITORING|PCTINCREASE|BUFFER_POOL|FLASH_CACHE|CELL_FLASH_CACHE|CLUSTER|INMEMORY|INMEMORY_DISTRIBUTE|INMEMORY_DUPLICATE|INMEMORY_COMPRESS|NOMAXVALUE|INTERVAL|AUTOMATIC|MANUAL)\\b"
+        },
+        {
+          "name": "keyword.control.gaussdb.sql",
+          "match": "(?i)\\b(REFRESH\\s+MATERIALIZED\\s+VIEW|MATERIALIZED\\s+VIEW|RECURSIVE\\s+VIEW|SECURITY\\s+INVOKER|SECURITY\\s+DEFINER|LANGUAGE\\s+SQL|LANGUAGE\\s+PLPGSQL|LANGUAGE\\s+PLPYTHON|RETURNS|IMMUTABLE|STABLE|VOLATILE|STRICT|CALLED\\s+ON\\s+NULL|RETURNS\\s+NULL\\s+ON\\s+NULL|SETOF|COST|ROWS|LEAKPROOF|WINDOW|AGGREGATE|TRIGGER|BEFORE|AFTER|INSTEAD\\s+OF|FOR\\s+EACH\\s+ROW|FOR\\s+EACH\\s+STATEMENT|EXECUTE\\s+PROCEDURE|EXECUTE\\s+FUNCTION|RETURNING|PERFORM|RAISE|NOTICE|EXCEPTION|CONTINUE|EXIT|OPEN|FETCH|CLOSE|CURSOR|FOUND|NOT\\s+FOUND|ROW_COUNT|RETURN\\s+NEXT|RETURN\\s+QUERY|OUT|INOUT|VARIADIC)\\b"
+        },
+        {
+          "name": "keyword.control.gaussdb.sql",
+          "match": "(?i)\\b(ANALYZE|ANALYSE|VACUUM|REINDEX|CLUSTER|EXPLAIN|EXPLAIN\\s+ANALYZE|EXPLAIN\\s+PERFORMANCE|PERFORMANCE|PLAN|NODEGROUP|EXECUTE\\s+DIRECT|PREDICATE|CONCURRENTLY|VERBOSE|FREEZE|FORCE|CASCADE)\\b"
+        },
+        {
+          "name": "keyword.control.gaussdb.sql",
+          "match": "(?i)\\b(COPY|BINARY|CSV|DELIMITER|NULL|HEADER|QUOTE|ESCAPE|ENCODING|FORCE\\s+QUOTE|FORCE\\s+NOT\\s+NULL|FORCE\\s+NULL|PROGRAM|FREEZE|FROM|TO|STDIN|STDOUT)\\b"
+        }
+      ]
+    },
+    "sql-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.sql",
+          "match": "(?i)\\b(TABLE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|ILIKE|SIMILAR\\s+TO|IS\\s+NULL|IS\\s+NOT\\s+NULL|ISNULL|NOTNULL|AS|ON|USING|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|LATERAL|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|CASE|WHEN|THEN|ELSE|END|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|SCHEMA|DATABASE|INDEX|CONSTRAINT|PRIMARY\\s+KEY|FOREIGN\\s+KEY|REFERENCES|UNIQUE|CHECK|DEFAULT|SERIAL|SEQUENCE|VIEW|FUNCTION|PROCEDURE|TRIGGER|TEMP|TEMPORARY|UNLOGGED|INHERITS|TABLESPACE)\\b"
+        }
+      ]
+    },
+    "gaussdb-functions": {
+      "patterns": [
+        {
+          "name": "support.function.gaussdb.sql",
+          "match": "(?i)\\b(ARRAY_AGG|STRING_AGG|ARRAY_TO_STRING|STRING_TO_ARRAY|UNNEST|GENERATE_SERIES|GENERATE_SUBSCRIPTS|REGEXP_MATCHES|REGEXP_SPLIT_TO_ARRAY|REGEXP_SPLIT_TO_TABLE|TO_TSVECTOR|TO_TSQUERY|PLAINTO_TSQUERY|TS_RANK|TS_HEADLINE|JSON_EXTRACT_PATH|JSON_EACH|JSON_OBJECT_KEYS|JSON_POPULATE_RECORD|JSON_TO_RECORD|JSON_AGG|JSON_BUILD_OBJECT|JSON_BUILD_ARRAY|ROW_TO_JSON|ARRAY_TO_JSON|XMLPARSE|XMLSERIALIZE|XMLFOREST|XMLAGG|XMLELEMENT|XMLCONCAT|PG_SLEEP|PG_BACKEND_PID|PG_CANCEL_BACKEND|PG_TERMINATE_BACKEND|PG_RELOAD_CONF|PG_ROTATE_LOGFILE|PG_SIZE_PRETTY|PG_TOTAL_RELATION_SIZE|PG_RELATION_SIZE|PG_DATABASE_SIZE|PG_TABLESPACE_SIZE|GEN_RANDOM_UUID|UUID_GENERATE_V4|MD5|SHA256|SHA512|HASHBYTES|ENCRYPT|DECRYPT|PGP_SYM_ENCRYPT|PGP_SYM_DECRYPT|GS_ENCRYPT_AES128|GS_DECRYPT_AES128|PG_STAT_GET_TUPLES_RETURNED|PG_STAT_GET_TUPLES_FETCHED|PG_STAT_GET_TUPLES_INSERTED|PG_STAT_GET_TUPLES_UPDATED|PG_STAT_GET_TUPLES_DELETED|PG_STAT_GET_LIVE_TUPLES|PG_STAT_GET_DEAD_TUPLES|PG_STAT_GET_BLOCKS_FETCHED|PG_STAT_GET_BLOCKS_HIT|PG_STAT_GET_TUPLES_HOT_UPDATED|SYS_GUID|GS_GET_CONTROL_GROUP_INFO|GS_WLM_SESSION_STATISTICS|GS_ALL_NODES_CHECK|GS_CLUSTER_RESOURCE_INFO|COPY_SUMMARY|WORKLOAD|SESSION_USER|CURRENT_USER|CURRENT_SCHEMA|HAS_TABLE_PRIVILEGE|HAS_COLUMN_PRIVILEGE|HAS_DATABASE_PRIVILEGE|PG_CATALOG|INFORMATION_SCHEMA)\\b"
+        }
+      ]
+    },
+    "sql-functions": {
+      "patterns": [
+        {
+          "name": "support.function.sql",
+          "match": "(?i)\\b(COUNT|SUM|AVG|MIN|MAX|STDDEV|VARIANCE|GROUP_CONCAT|IFNULL|NULLIF|COALESCE|GREATEST|LEAST|CAST|CONVERT|EXTRACT|POSITION|SUBSTRING|TRIM|UPPER|LOWER|LENGTH|REPLACE|CONCAT|NOW|CURRENT_DATE|CURRENT_TIMESTAMP|DATE|TIME|TIMESTAMP|INTERVAL|ROW_NUMBER|RANK|DENSE_RANK|NTILE|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTH_VALUE|ABS|CEIL|CEILING|FLOOR|ROUND|TRUNC|MOD|POWER|SQRT|SIGN|RANDOM|LN|LOG|EXP|SIN|COS|TAN|ASIN|ACOS|ATAN|DEGREES|RADIANS|PI)\\b"
+        }
+      ]
+    },
+    "gaussdb-types": {
+      "patterns": [
+        {
+          "name": "storage.type.gaussdb.sql",
+          "match": "(?i)\\b(SMALLINT|INTEGER|INT|BIGINT|INT8|INT16|INT32|INT64|INT128|INT256|TINYINT|NUMERIC|DECIMAL|NUMBER|REAL|FLOAT4|FLOAT8|FLOAT|DOUBLE\\s+PRECISION|BINARY_DOUBLE|BINARY_FLOAT|MONEY|SMALLSERIAL|SERIAL|BIGSERIAL|CHARACTER|CHAR|VARCHAR|VARCHAR2|NVARCHAR2|CHARACTER\\s+VARYING|TEXT|CLOB|NCLOB|BYTEA|RAW|BLOB|BFILE|BOOLEAN|BOOL|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|TIMETZ|INTERVAL|INTERVAL\\s+YEAR|INTERVAL\\s+MONTH|INTERVAL\\s+DAY|UUID|JSON|JSONB|XML|XMLTYPE|POINT|LINE|LSEG|BOX|PATH|POLYGON|CIRCLE|CIDR|INET|MACADDR|MACADDR8|BIT|VARBIT|TSVECTOR|TSQUERY|INT4RANGE|INT8RANGE|NUMRANGE|TSRANGE|TSTZRANGE|DATERANGE|OID|REGCLASS|REGPROC)\\b"
+        }
+      ]
+    },
+    "sql-types": {
+      "patterns": [
+        {
+          "name": "storage.type.sql",
+          "match": "(?i)\\b(INTEGER|INT|SMALLINT|TINYINT|BIGINT|REAL|FLOAT|DOUBLE|DECIMAL|NUMERIC|CHAR|VARCHAR|TEXT|BLOB|CLOB|DATE|TIME|TIMESTAMP|BOOLEAN|BIT)\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "entity.name.function.sql",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "variable.parameter.sql",
+          "match": "\\$[0-9]+"
+        },
+        {
+          "name": "variable.language.sql",
+          "match": "(?i)\\b(FOUND|NOTFOUND|SQLSTATE|SQLERRM|TG_OP|TG_NAME|TG_WHEN|TG_LEVEL|TG_RELID|TG_TABLE_NAME|TG_TABLE_SCHEMA|TG_NARGS|TG_ARGV|NEW|OLD)\\b"
+        },
+        { "include": "#variables" }
+      ]
+    }
+  }
+}

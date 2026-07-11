@@ -1,0 +1,147 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL (TDH)",
+  "scopeName": "source.sql.tdh",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#tdh-keywords" },
+    { "include": "#sql-keywords" },
+    { "include": "#tdh-functions" },
+    { "include": "#sql-functions" },
+    { "include": "#tdh-types" },
+    { "include": "#sql-types" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.sql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.sql",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.constant.sql",
+          "match": "\\$\\{[a-zA-Z_][a-zA-Z0-9_]*\\}"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.sql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.sql", "match": "''" },
+            { "include": "#variables" }
+          ]
+        },
+        {
+          "name": "string.quoted.double.sql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#variables" }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.sql",
+          "match": "\\b(\\d+(\\.\\d+)?([eE][+-]?\\d+)?)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.sql",
+          "match": "(<>|<=|>=|!=|=|<|>|\\+|\\-|\\*|/|%|\\|\\||&&)"
+        }
+      ]
+    },
+    "tdh-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.tdh.sql",
+          "match": "(?i)\\b(LATERAL\\s+VIEW|LATERAL\\s+VIEW\\s+OUTER|EXPLODE|POSEXPLODE|INLINE|STACK|JSON_TUPLE|PARSE_URL_TUPLE|CLUSTER\\s+BY|DISTRIBUTE\\s+BY|SORT\\s+BY|TABLESAMPLE|BUCKET|SKEWED\\s+BY|STORED\\s+AS|ROW\\s+FORMAT|SERDE|WITH\\s+SERDEPROPERTIES|TBLPROPERTIES|LOCATION|LOAD\\s+DATA|OVERWRITE|PARTITIONED\\s+BY|CLUSTERED\\s+BY|INTO\\s+BUCKETS|ANALYZE\\s+TABLE|COMPUTE\\s+STATISTICS|SHOW\\s+PARTITIONS|SHOW\\s+CREATE\\s+TABLE|DESCRIBE\\s+FORMATTED|DESCRIBE\\s+EXTENDED|MSCK\\s+REPAIR|REFRESH|INVALIDATE\\s+METADATA|ADD\\s+JAR|ADD\\s+FILE|SET\\s+STREAMING|COMPACT|TRANSACTIONAL|TEMPORARY|TEMP|NOT\\s+NULL|DEFAULT|COMMENT|IF\\s+NOT\\s+EXISTS|PURGE|CASCADE|RESTRICT)\\b"
+        },
+        {
+          "name": "keyword.control.tdh.sql",
+          "match": "(?i)\\b(SEMI|ANTI|UNIQUEJOIN|MAPJOIN|STREAMTABLE|BROADCAST)\\b"
+        }
+      ]
+    },
+    "sql-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.sql",
+          "match": "(?i)\\b(TABLE|VIEW|SCHEMA|DATABASE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|RLIKE|REGEXP|IS\\s+NULL|IS\\s+NOT\\s+NULL|AS|ON|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|LEFT\\s+SEMI\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|CASE|WHEN|THEN|ELSE|END|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|LATERAL)\\b"
+        }
+      ]
+    },
+    "tdh-functions": {
+      "patterns": [
+        {
+          "name": "support.function.tdh.sql",
+          "match": "(?i)\\b(COLLECT_LIST|COLLECT_SET|ARRAY_CONTAINS|SORT_ARRAY|EXPLODE|POSEXPLODE|INLINE|STACK|JSON_TUPLE|PARSE_URL_TUPLE|GET_JSON_OBJECT|LATERAL_VIEW|LATERAL_VIEW_OUTER|REFLECT|JAVA_METHOD|SENTENCE|NGRAMS|CONTEXT_NGRAMS|WINDOWING_TABLE_FUNCTION|WINDOW|LEAD|LAG|FIRST_VALUE|LAST_VALUE|RANK|DENSE_RANK|ROW_NUMBER|CUME_DIST|PERCENT_RANK|NTILE|COVAR_POP|COVAR_SAMP|CORR|PERCENTILE|PERCENTILE_APPROX|REGR_AVGX|REGR_AVGY|REGR_COUNT|REGR_INTERCEPT|REGR_R2|REGR_SLOPE|REGR_SXX|REGR_SXY|REGR_SYY|HISTOGRAM_NUMERIC|STDDEV_POP|STDDEV_SAMP|VAR_POP|VAR_SAMP|GROUPING|GROUPING__ID|COALESCE|IF|ISNULL|ISNOTNULL|NVL|NULLIF|ASSERT_TRUE|PRINTF|CONCAT_WS|FORMAT_NUMBER|INSTR|LENGTH|LOCATE|LOWER|LPAD|LTRIM|REGEXP_EXTRACT|REGEXP_REPLACE|REPEAT|REVERSE|RPAD|RTRIM|SPACE|SPLIT|SUBSTR|SUBSTRING|TRANSLATE|TRIM|UPPER|ASCII|BASE64|CHARACTER_LENGTH|CHR|CONCAT|CONTEXT_NGRAMS|DECODE|ELT|ENCODE|FIELD|FIND_IN_SET|GET_JSON_OBJECT|IN_FILE|INITCAP|LEVENSHTEIN|PARSE_URL|SOUNDEX|STR_TO_MAP|PARSE_URL_TUPLE|FROM_UNIXTIME|UNIX_TIMESTAMP|TO_DATE|YEAR|QUARTER|MONTH|DAY|DAYOFMONTH|HOUR|MINUTE|SECOND|WEEKOFYEAR|DATEDIFF|DATE_ADD|DATE_SUB|ADD_MONTHS|LAST_DAY|NEXT_DAY|TRUNC|MONTHS_BETWEEN|ABS|ACOS|ASIN|ATAN|BIN|BROUND|CBRT|CEIL|CEILING|CONV|COS|DEGREES|E|EXP|FACTORIAL|FLOOR|GREATEST|HEX|LEAST|LN|LOG|LOG10|LOG2|NEGATIVE|PI|PMOD|POSITIVE|POW|POWER|RADIANS|RAND|ROUND|SIGN|SIN|SQRT|TAN|UNHEX|WIDTH_BUCKET|BINARY|CAST|MAP|STRUCT|ARRAY|NAMED_STRUCT|CREATE_UNION)\\b"
+        }
+      ]
+    },
+    "sql-functions": {
+      "patterns": [
+        {
+          "name": "support.function.sql",
+          "match": "(?i)\\b(COUNT|SUM|AVG|MIN|MAX|STDDEV|VARIANCE|GROUP_CONCAT|IFNULL|NULLIF|COALESCE|CAST|CONVERT|EXTRACT|POSITION|SUBSTRING|TRIM|UPPER|LOWER|LENGTH|REPLACE|CONCAT|NOW|CURRENT_DATE|CURRENT_TIMESTAMP|DATE|TIME|TIMESTAMP|INTERVAL|ROW_NUMBER|RANK|DENSE_RANK|NTILE|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTH_VALUE)\\b"
+        }
+      ]
+    },
+    "tdh-types": {
+      "patterns": [
+        {
+          "name": "storage.type.tdh.sql",
+          "match": "(?i)\\b(TINYINT|SMALLINT|INT|INTEGER|BIGINT|FLOAT|DOUBLE|DOUBLE\\s+PRECISION|DECIMAL|NUMERIC|STRING|VARCHAR|CHAR|BOOLEAN|BINARY|TIMESTAMP|DATE|INTERVAL|ARRAY|MAP|STRUCT|UNIONTYPE)\\b"
+        }
+      ]
+    },
+    "sql-types": {
+      "patterns": [
+        {
+          "name": "storage.type.sql",
+          "match": "(?i)\\b(INTEGER|INT|SMALLINT|TINYINT|BIGINT|REAL|FLOAT|DOUBLE|DECIMAL|NUMERIC|CHAR|VARCHAR|TEXT|BLOB|CLOB|DATE|TIME|TIMESTAMP|BOOLEAN|BIT|JSON|XML)\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "entity.name.function.sql",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "entity.name.dblink.tdh.sql",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_.]*)\\s*@\\s*([a-zA-Z_][a-zA-Z0-9_]*)"
+        },
+        {
+          "name": "keyword.operator.dblink.tdh.sql",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        { "include": "#variables" }
+      ]
+    }
+  }
+}
