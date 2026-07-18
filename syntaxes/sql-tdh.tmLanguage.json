@@ -3,6 +3,7 @@
   "name": "SQL (TDH)",
   "scopeName": "source.sql.tdh",
   "patterns": [
+    { "include": "#brackets" },
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#numbers" },
@@ -16,6 +17,18 @@
     { "include": "#identifiers" }
   ],
   "repository": {
+    "brackets": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.bracket.begin keyword.control.sql",
+          "match": "(?i)\\bCASE\\b"
+        },
+        {
+          "name": "punctuation.definition.bracket.end keyword.control.sql",
+          "match": "(?i)\\bEND\\b"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {
@@ -90,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.sql",
-          "match": "(?i)\\b(TABLE|VIEW|SCHEMA|DATABASE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|RLIKE|REGEXP|IS\\s+NULL|IS\\s+NOT\\s+NULL|AS|ON|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|LEFT\\s+SEMI\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|CASE|WHEN|THEN|ELSE|END|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|LATERAL)\\b"
+          "match": "(?i)\\b(TABLE|VIEW|SCHEMA|DATABASE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|RLIKE|REGEXP|IS\\s+NULL|IS\\s+NOT\\s+NULL|AS|ON|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|LEFT\\s+SEMI\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|WHEN|THEN|ELSE|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|LATERAL)\\b"
         }
       ]
     },

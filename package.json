@@ -1,7 +1,7 @@
 {
   "name": "sql-dialect-highlight",
   "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
-  "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮",
+  "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
   "version": "0.1.0",
   "publisher": "sql-dialect-publisher",
   "license": "MIT",
@@ -15,18 +15,37 @@
   "categories": [
     "Programming Languages"
   ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:sql-tdh",
+    "onLanguage:sql-gaussdb"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "sql-tdh",
-        "aliases": ["SQL (TDH)", "tdh-sql", "Transwarp SQL"],
-        "extensions": [".tdhsql", ".tdh.sql"],
+        "aliases": [
+          "SQL (TDH)",
+          "tdh-sql",
+          "Transwarp SQL"
+        ],
+        "extensions": [
+          ".tdhsql",
+          ".tdh.sql"
+        ],
         "configuration": "./language-configuration.json"
       },
       {
         "id": "sql-gaussdb",
-        "aliases": ["SQL (GaussDB)", "gaussdb-sql", "GaussDB SQL"],
-        "extensions": [".gaussql", ".gauss.sql"],
+        "aliases": [
+          "SQL (GaussDB)",
+          "gaussdb-sql",
+          "GaussDB SQL"
+        ],
+        "extensions": [
+          ".gaussql",
+          ".gauss.sql"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -41,6 +60,58 @@
         "scopeName": "source.sql.gaussdb",
         "path": "./syntaxes/sql-gaussdb.tmLanguage.json"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "[sql-tdh]": {
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": true
+      },
+      "[sql-gaussdb]": {
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": true
+      }
+    },
+    "configuration": {
+      "title": "SQL Dialect Highlight",
+      "properties": {
+        "sqlDialectHighlight.format.indentSize": {
+          "type": "number",
+          "default": 4,
+          "description": "缩进空格数"
+        },
+        "sqlDialectHighlight.format.maxWidth": {
+          "type": "number",
+          "default": 200,
+          "description": "单行最大字符数"
+        },
+        "sqlDialectHighlight.format.commaFirst": {
+          "type": "boolean",
+          "default": true,
+          "description": "逗号优先（逗号在行首）"
+        },
+        "sqlDialectHighlight.format.andAlign": {
+          "type": "boolean",
+          "default": true,
+          "description": "AND 行首对齐（多条件时拆分）"
+        },
+        "sqlDialectHighlight.format.keywordCase": {
+          "type": "string",
+          "default": "upper",
+          "enum": [
+            "upper",
+            "lower",
+            "preserve"
+          ],
+          "description": "关键字大小写"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "sql-formatter": "^14.0.0",
+    "vkbeautify": "^0.99.3"
   }
 }

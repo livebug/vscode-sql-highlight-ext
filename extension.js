@@ -1,0 +1,236 @@
+const vscode = require('vscode');
+const { formatSQL } = require('./formatter');
+
+/**
+ * 激活扩展：注册 SQL 格式化器 + 语义高亮（表名/字段名）
+ */
+function activate(context) {
+    const languages = ['sql-tdh', 'sql-gaussdb'];
+
+    // ========== 1. SQL 格式化 ==========
+    languages.forEach(lang => {
+        context.subscriptions.push(
+            vscode.languages.registerDocumentFormattingEditProvider(lang, {
+                provideDocumentFormattingEdits(document) {
+                    const text = document.getText();
+                    const config = vscode.workspace.getConfiguration('sqlDialectHighlight.format');
+                    try {
+                        const formatted = formatSQL(text, {
+                            indentSize: config.get('indentSize', 4),
+                            maxWidth: config.get('maxWidth', 200),
+                            commaFirst: config.get('commaFirst', true),
+                            andAlign: config.get('andAlign', true),
+                            keywordCase: config.get('keywordCase', 'upper'),
+                        });
+                        const fullRange = new vscode.Range(
+                            document.positionAt(0),
+                            document.positionAt(text.length)
+                        );
+                        return [vscode.TextEdit.replace(fullRange, formatted)];
+                    } catch (e) {
+                        vscode.window.showErrorMessage('SQL 格式化失败: ' + e.message);
+                        return [];
+                    }
+                }
+            })
+        );
+    });
+
+    // ========== 2. 语义高亮：表名 / 字段名 / 别名 ==========
+    const tokenTypes = ['class', 'property', 'variable', 'function'];
+    const tokenModifiers = ['declaration', 'readonly'];
+    const legend = new vscode.SemanticTokensLegend(tokenTypes, tokenModifiers);
+
+    languages.forEach(lang => {
+        context.subscriptions.push(
+            vscode.languages.registerDocumentSemanticTokensProvider(lang, {
+                provideDocumentSemanticTokens(document) {
+                    return provideSemanticTokens(document, legend);
+                }
+            }, legend)
+        );
+    });
+
+    vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
+
+    // ========== 3. CASE/BEGIN ↔ END 括号配对高亮 ==========
+    const bracketHighlight = vscode.window.createTextEditorDecorationType({
+        backgroundColor: 'rgba(100, 180, 255, 0.15)',
+        border: '1px solid rgba(100, 180, 255, 0.6)',
+        borderRadius: '2px',
+        fontWeight: 'bold',
+    });
+
+    function findMatchingBracket(doc, range, word) {
+        const text = doc.getText();
+        const isOpen = (word === 'CASE' || word === 'BEGIN');
+
+        if (isOpen) {
+            let depth = 1;
+            let pos = doc.offsetAt(range.end);
+            const re = /\b(CASE|BEGIN|END)\b/gi;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                if (m.index < pos) continue;
+                const w = m[0].toUpperCase();
+                if (w === 'CASE' || w === 'BEGIN') depth++;
+                else if (w === 'END') {
+                    depth--;
+                    if (depth === 0) {
+                        return new vscode.Range(
+                            doc.positionAt(m.index),
+                            doc.positionAt(m.index + 3)
+                        );
+                    }
+                }
+            }
+        } else {
+            // END → 向前找匹配的 CASE 或 BEGIN
+            let depth = 1;
+            let pos = doc.offsetAt(range.start);
+            const re = /\b(CASE|BEGIN|END)\b/gi;
+            const matches = [];
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                matches.push({ word: m[0].toUpperCase(), index: m.index });
+            }
+            for (let i = matches.length - 1; i >= 0; i--) {
+                if (matches[i].index >= pos) continue;
+                const w = matches[i].word;
+                if (w === 'END') depth++;
+                else if (w === 'CASE' || w === 'BEGIN') {
+                    depth--;
+                    if (depth === 0) {
+                        const idx = matches[i].index;
+                        return new vscode.Range(
+                            doc.positionAt(idx),
+                            doc.positionAt(idx + w.length)
+                        );
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    function updateBracketHighlight(editor) {
+        if (!editor) return;
+        const langId = editor.document.languageId;
+        if (langId !== 'sql-tdh' && langId !== 'sql-gaussdb') return;
+
+        const pos = editor.selection.active;
+        const wordRange = editor.document.getWordRangeAtPosition(pos, /\b(CASE|BEGIN|END)\b/i);
+        if (!wordRange) {
+            editor.setDecorations(bracketHighlight, []);
+            return;
+        }
+
+        const word = editor.document.getText(wordRange).toUpperCase();
+        if (word !== 'CASE' && word !== 'BEGIN' && word !== 'END') {
+            editor.setDecorations(bracketHighlight, []);
+            return;
+        }
+
+        const matchRange = findMatchingBracket(editor.document, wordRange, word);
+        editor.setDecorations(bracketHighlight, matchRange ? [wordRange, matchRange] : []);
+    }
+
+    // 光标移动时更新
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection(e => {
+            updateBracketHighlight(e.textEditor);
+        })
+    );
+
+    // 初次激活时更新当前编辑器
+    if (vscode.window.activeTextEditor) {
+        updateBracketHighlight(vscode.window.activeTextEditor);
+    }
+}
+
+// ---- 语义 Token 提供 ----
+function provideSemanticTokens(document, legend) {
+    const builder = new vscode.SemanticTokensBuilder(legend);
+    const text = document.getText();
+    const lines = text.split('\n');
+
+    // 关键字集合（用于跳过）
+    const keywords = new Set([
+        'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'EXISTS',
+        'BETWEEN', 'LIKE', 'RLIKE', 'REGEXP', 'AS', 'ON', 'JOIN',
+        'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'OUTER',
+        'SEMI', 'ANTI', 'UNION', 'INTERSECT', 'EXCEPT', 'MINUS',
+        'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+        'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'REPLACE', 'MERGE',
+        'GRANT', 'REVOKE', 'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET',
+        'FETCH', 'FOR', 'ASC', 'DESC', 'CASE', 'WHEN', 'THEN', 'ELSE',
+        'END', 'NULL', 'TRUE', 'FALSE', 'DISTINCT', 'ALL', 'ANY', 'SOME',
+        'WITH', 'RECURSIVE', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE',
+        'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'LATERAL',
+        'TABLE', 'VIEW', 'SCHEMA', 'DATABASE', 'TEMP', 'TEMPORARY',
+        'BEGIN', 'CALL', 'COMMIT', 'ROLLBACK', 'SAVEPOINT',
+        'DEFAULT', 'CASCADE', 'RESTRICT', 'PURGE', 'IF', 'COMMENT',
+        'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'INDEX', 'CONSTRAINT',
+        'CHECK', 'UNIQUE', 'ADD', 'COLUMN', 'RENAME', 'TO',
+        'IS', 'NOT', 'NULLS', 'FIRST', 'LAST',
+    ]);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trimStart();
+        const indentLen = line.length - trimmed.length; // 缩进偏移量
+        if (!trimmed || trimmed.startsWith('--')) continue;
+
+        const upper = trimmed.toUpperCase();
+
+        // (A) FROM / JOIN / INTO / UPDATE / TABLE / TRUNCATE / DESCRIBE 后的标识符 → 表名 (class)
+        const tableContextRegex = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/gi;
+        let m;
+        while ((m = tableContextRegex.exec(upper)) !== null) {
+            const word = m[1];
+            if (keywords.has(word.toUpperCase())) continue;
+            const start = trimmed.indexOf(word);
+            if (start !== -1) {
+                builder.push(i, indentLen + start, word.length, 0, 0);
+            }
+        }
+
+        // (B) 表别名声明（表名后有空格+短标识符，非关键字）→ variable.declaration
+        const aliasDeclRegex = /\b([a-zA-Z_][a-zA-Z0-9_.]*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+        while ((m = aliasDeclRegex.exec(upper)) !== null) {
+            const alias = m[2];
+            if (keywords.has(alias.toUpperCase())) continue;
+            const before = trimmed.substring(0, m.index).trimEnd();
+            if (before.endsWith(' AS') || before.endsWith(' as')) continue;
+            const start = trimmed.indexOf(alias, m.index + m[1].length);
+            if (start !== -1 && alias.length <= 20) {
+                builder.push(i, indentLen + start, alias.length, 2, 0);
+            }
+        }
+
+        // (C) AS 别名 → variable.declaration
+        const asAliasRegex = /\bAS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gi;
+        while ((m = asAliasRegex.exec(upper)) !== null) {
+            const alias = m[1];
+            if (keywords.has(alias.toUpperCase())) continue;
+            const start = trimmed.indexOf(alias, m.index + 3);
+            if (start !== -1) {
+                builder.push(i, indentLen + start, alias.length, 2, 0);
+            }
+        }
+
+        // (D) 表名.字段名 → property (字段部分高亮)
+        const dotFieldRegex = /\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+        while ((m = dotFieldRegex.exec(trimmed)) !== null) {
+            const field = m[1];
+            if (keywords.has(field.toUpperCase())) continue;
+            builder.push(i, indentLen + m.index + 1, field.length, 1, 0);
+        }
+    }
+
+    return builder.build();
+}
+
+function deactivate() {}
+
+module.exports = { activate, deactivate };

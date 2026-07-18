@@ -6,7 +6,8 @@
   "brackets": [
     ["(", ")"],
     ["[", "]"],
-    ["CASE", "END"]
+    ["CASE", "END"],
+    ["BEGIN", "END"]
   ],
   "autoClosingPairs": [
     { "open": "(", "close": ")" },
