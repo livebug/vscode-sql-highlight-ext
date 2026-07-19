@@ -142,16 +142,16 @@
     "identifiers": {
       "patterns": [
         {
-          "name": "entity.name.function.sql",
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
-        },
-        {
           "name": "entity.name.dblink.tdh.sql",
           "match": "\\b([a-zA-Z_][a-zA-Z0-9_.]*)\\s*@\\s*([a-zA-Z_][a-zA-Z0-9_]*)"
         },
         {
           "name": "keyword.operator.dblink.tdh.sql",
           "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "name": "entity.name.function.sql",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
         },
         { "include": "#variables" }
       ]
