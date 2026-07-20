@@ -53,18 +53,30 @@ function activate(context) {
 
     vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
 
-    // ========== 3. CASE/BEGIN ↔ END 括号配对高亮 ==========
+    // ========== 3. CASE/BEGIN ↔ END 与 WHEN ↔ THEN 括号配对高亮 ==========
     const bracketHighlight = vscode.window.createTextEditorDecorationType({
         backgroundColor: 'rgba(100, 180, 255, 0.15)',
         border: '1px solid rgba(100, 180, 255, 0.6)',
         borderRadius: '2px',
         fontWeight: 'bold',
+        textDecoration: 'underline',
     });
 
+    /**
+     * 找到匹配的括号对
+     * 支持: CASE↔END, BEGIN↔END, WHEN↔THEN
+     */
     function findMatchingBracket(doc, range, word) {
         const text = doc.getText();
-        const isOpen = (word === 'CASE' || word === 'BEGIN');
+        const isOpen = (word === 'CASE' || word === 'BEGIN' || word === 'WHEN');
+        const isClose = (word === 'END' || word === 'THEN');
 
+        // ---- WHEN ↔ THEN 配对 ----
+        if (word === 'WHEN' || word === 'THEN') {
+            return findWhenThenMatch(doc, range, word, text);
+        }
+
+        // ---- CASE/BEGIN ↔ END 配对 ----
         if (isOpen) {
             let depth = 1;
             let pos = doc.offsetAt(range.end);
@@ -84,7 +96,7 @@ function activate(context) {
                     }
                 }
             }
-        } else {
+        } else if (isClose) {
             // END → 向前找匹配的 CASE 或 BEGIN
             let depth = 1;
             let pos = doc.offsetAt(range.start);
@@ -113,20 +125,75 @@ function activate(context) {
         return null;
     }
 
+    /**
+     * WHEN ↔ THEN 配对查找
+     * WHEN (open) → 向后找最近的 THEN（忽略嵌套 CASE/END）
+     * THEN (close) → 向前找最近的 WHEN
+     */
+    function findWhenThenMatch(doc, range, word, text) {
+        if (word === 'WHEN') {
+            // 向后扫描找 THEN，跳过嵌套的 CASE...END 块
+            let caseDepth = 0;
+            let pos = doc.offsetAt(range.end);
+            const re = /\b(CASE|WHEN|THEN|ELSE|END)\b/gi;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                if (m.index < pos) continue;
+                const w = m[0].toUpperCase();
+                if (w === 'CASE') { caseDepth++; }
+                else if (w === 'END') { caseDepth--; }
+                else if (w === 'THEN' && caseDepth === 0) {
+                    return new vscode.Range(
+                        doc.positionAt(m.index),
+                        doc.positionAt(m.index + 4)
+                    );
+                }
+            }
+        } else if (word === 'THEN') {
+            // 向前扫描找 WHEN
+            let caseDepth = 0;
+            let pos = doc.offsetAt(range.start);
+            const re = /\b(CASE|WHEN|THEN|ELSE|END)\b/gi;
+            const matches = [];
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                matches.push({ word: m[0].toUpperCase(), index: m.index });
+            }
+            for (let i = matches.length - 1; i >= 0; i--) {
+                if (matches[i].index >= pos) continue;
+                const w = matches[i].word;
+                if (w === 'END') { caseDepth++; }
+                else if (w === 'CASE') { caseDepth--; }
+                else if (w === 'WHEN' && caseDepth === 0) {
+                    const idx = matches[i].index;
+                    return new vscode.Range(
+                        doc.positionAt(idx),
+                        doc.positionAt(idx + 4)
+                    );
+                }
+            }
+        }
+        return null;
+    }
+
     function updateBracketHighlight(editor) {
         if (!editor) return;
         const langId = editor.document.languageId;
         if (langId !== 'sql-tdh' && langId !== 'sql-gaussdb') return;
 
         const pos = editor.selection.active;
-        const wordRange = editor.document.getWordRangeAtPosition(pos, /\b(CASE|BEGIN|END)\b/i);
+        const wordRange = editor.document.getWordRangeAtPosition(
+            pos,
+            /\b(CASE|BEGIN|END|WHEN|THEN)\b/i
+        );
         if (!wordRange) {
             editor.setDecorations(bracketHighlight, []);
             return;
         }
 
         const word = editor.document.getText(wordRange).toUpperCase();
-        if (word !== 'CASE' && word !== 'BEGIN' && word !== 'END') {
+        if (word !== 'CASE' && word !== 'BEGIN' && word !== 'END'
+            && word !== 'WHEN' && word !== 'THEN') {
             editor.setDecorations(bracketHighlight, []);
             return;
         }

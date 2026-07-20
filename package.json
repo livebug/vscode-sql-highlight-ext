@@ -2,7 +2,7 @@
   "name": "sql-dialect-highlight",
   "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
   "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "sql-dialect-publisher",
   "license": "MIT",
   "repository": {

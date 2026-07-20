@@ -21,11 +21,11 @@
       "patterns": [
         {
           "name": "punctuation.definition.bracket.begin keyword.control.sql",
-          "match": "(?i)\\b(CASE|BEGIN)\\b"
+          "match": "(?i)\\b(CASE|BEGIN|WHEN)\\b"
         },
         {
           "name": "punctuation.definition.bracket.end keyword.control.sql",
-          "match": "(?i)\\bEND\\b"
+          "match": "(?i)\\b(END|THEN)\\b"
         }
       ]
     },
