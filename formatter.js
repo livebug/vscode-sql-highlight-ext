@@ -16,8 +16,8 @@ function protect(sql) {
     w = w.replace(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, m => { storeV.push(m); return '__V'+(ciV++)+'__'; });
     // 字符串: 支持 SQL 标准 '' 转义，不跨行
     w = w.replace(/'([^'\n]|'')*'/g, m => { storeS.push(m); return '__S'+(ciS++)+'__'; });
-    // 行注释捕获尾部换行（; 分割前需要用）
-    w = w.replace(/--[^\n]*\n?/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
+    // 行注释: 不捕获尾部 \n（\n 保留在原位，方便后续 standalone 检测和换行处理）
+    w = w.replace(/--[^\n]*/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     w = w.replace(/\/\*[\s\S]*?\*\//g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     return w;
 }
@@ -168,11 +168,19 @@ function formatCommaList(kw, content, opts) {
     }
     items = expanded;
 
-    // 单行尝试：无行内注释时可用
     const hasComment = items.some(s => /^__C\d+__$/.test(s));
+    const isSelect = kw === 'SELECT';
+
+    // 单行判断：
+    //   SELECT: 仅 1 个字段且无注释 → 可单行；否则强制多行
+    //   ORDER BY / GROUP BY: ≤3 个字段且总长 ≤80 → 单行
     if (!hasComment) {
-        const singleLine = kw + ' ' + items.join(', ');
-        if (singleLine.length <= 150) return singleLine;
+        if (!isSelect) {
+            const singleLine = kw + ' ' + items.join(', ');
+            if (items.length <= 3 && singleLine.length <= 80) return singleLine;
+        } else if (items.length <= 1) {
+            return kw + ' ' + items.join(', ');
+        }
     }
 
     // 逗号优先拆分
@@ -185,8 +193,10 @@ function formatCommaList(kw, content, opts) {
             lines.push(item);
             firstField = true; // 注释后下一个字段用一级缩进
         } else {
+            // 递归展开字段中的子查询
+            const formatted = formatSubqueryContent(item, opts);
             const prefix = firstField ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
-            lines.push(prefix + item);
+            lines.push(prefix + formatted);
             firstField = false;
         }
     }
@@ -195,10 +205,13 @@ function formatCommaList(kw, content, opts) {
 
 function formatAndList(kw, content, andIndent, opts) {
     const parts = splitAndOr(content).map(s=>s.trim()).filter(Boolean);
-    if (parts.length<=1) return kw+' '+content;
-    if (parts.length===2 && (kw+' '+content).length<=60) return kw+' '+content;
+    if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts);
+    if (parts.length===2 && (kw+' '+content).length<=60) return kw + ' ' + formatSubqueryContent(content, opts);
     const lines = [];
-    for (let i=0; i<parts.length; i++) lines.push(i===0?(kw+' '+parts[i]):(andIndent+'AND '+parts[i]));
+    for (let i=0; i<parts.length; i++) {
+        const partFormatted = formatSubqueryContent(parts[i], opts);
+        lines.push(i===0 ? (kw+' '+partFormatted) : (andIndent+'AND '+partFormatted));
+    }
     return lines.join('\n');
 }
 
@@ -221,9 +234,40 @@ function formatSubqueryContent(content, opts) {
         const inner = content.slice(oi+1, j);
         if (/^\s*(SELECT|WITH)\b/i.test(inner)) {
             const formatted = formatTop(inner, opts);
-            r += '(\n'+formatted.split('\n').map(l=>INDENT+l).join('\n')+'\n)';
-        } else { r += '('+inner+')'; }
+            r += '(\n' + formatted.split('\n').map(l => INDENT + l).join('\n') + '\n)';
+        } else {
+            r += '(' + formatInParenContent(inner, opts) + ')';
+        }
         i = j+1;
+    }
+    return r;
+}
+
+/**
+ * 对括号内的非子查询内容递归展开子查询（用于 WHERE/SELECT/HAVING 中）
+ */
+function formatInParenContent(content, opts) {
+    // 递归处理内容中可能出现的内嵌子查询
+    let r = '', i = 0;
+    const INDENT = ' '.repeat(opts.indentSize);
+    while (i < content.length) {
+        const oi = content.indexOf('(', i);
+        if (oi === -1) { r += content.slice(i); break; }
+        r += content.slice(i, oi);
+        let d = 0, j = oi, ok = false;
+        for (; j < content.length; j++) {
+            if (content[j] === '(') d++;
+            else if (content[j] === ')') { d--; if (d === 0) { ok = true; break; } }
+        }
+        if (!ok) { r += content.slice(oi); break; }
+        const inner = content.slice(oi + 1, j);
+        if (/^\s*(SELECT|WITH)\b/i.test(inner)) {
+            const formatted = formatTop(inner, opts);
+            r += '(\n' + formatted.split('\n').map(l => INDENT + l).join('\n') + '\n)';
+        } else {
+            r += '(' + formatInParenContent(inner, opts) + ')';
+        }
+        i = j + 1;
     }
     return r;
 }
@@ -262,20 +306,13 @@ function splitSQLStatements(sql) {
 function formatSingleSQL(sql, options) {
     const opts = Object.assign({}, DEFAULTS, options||{});
     let w = protect(sql);
-    // 压缩空白前，记录哪些 __C__ 是独立注释（前/后跟 \n 或头尾）
-    const standaloneComments = new Set();
-    let m;
-    const re = /(^|\n)__C(\d+)__(\n|$)/g;
-    while ((m = re.exec(w)) !== null) {
-        standaloneComments.add(parseInt(m[2]));
-    }
-    w = w.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
-    // 独立注释前后加换行
+    // 独行注释占位符补回尾部 \n（注释保护时被吞掉）
     w = w.replace(/__C(\d+)__/g, (match, num) => {
-        const idx = parseInt(num);
-        if (standaloneComments.has(idx)) return '\n' + match + '\n';
-        return match;
+        const c = storeC[parseInt(num)];
+        return (c && c.endsWith('\n')) ? match + '\n' : match;
     });
+    // 横向空白压缩，但保留换行（注释边界需要）
+    w = w.replace(/[ \t]+/g, ' ').trim();
     w = uppercase(w);
     w = protectOver(w);
     w = formatTop(w, opts);
