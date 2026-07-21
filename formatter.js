@@ -72,6 +72,9 @@ function uppercase(sql) {
     });
 }
 
+// ======================== JOIN 对齐追踪 ========================
+let lastJoinEndCol = 0;  // 上一个 JOIN 关键字结束列号（用于 ON/AND 右对齐）
+
 // ======================== 从句拆分 ========================
 const MAIN_RE = /\b(SELECT|FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+OUTER\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|NATURAL\s+JOIN|JOIN|ON|UNION|UNION\s+ALL|INTERSECT|EXCEPT|MINUS|DELETE|INSERT|INTO|UPDATE|SET)\b/gi;
 
@@ -138,11 +141,18 @@ function formatSegment(seg, opts) {
         case 'SELECT': return formatCommaList('SELECT', content, opts);
         case 'FROM': return 'FROM '+formatSubqueryContent(content, opts);
         case 'WHERE': case 'HAVING': return formatAndList(kw, content, CI, opts);
-        case 'ON': return formatAndList(CI+'ON', content, CI+'  ', opts);
+        case 'ON': {
+            // ON/AND 右对齐到前一个 JOIN 关键字的末尾列
+            const endCol = lastJoinEndCol || (CI.length + 4);  // 默认右对齐到 "JOIN"
+            const onPad  = ' '.repeat(endCol - 2);   // "ON" 占 2 字符
+            const andPad = ' '.repeat(endCol - 3);   // "AND" 占 3 字符
+            return formatAndList(onPad + 'ON', content, andPad, opts);
+        }
         case 'GROUP BY': case 'ORDER BY': return formatCommaList(kw, content, opts);
         case 'LIMIT': case 'OFFSET': return kw+' '+content;
         default:
             if (kw.includes('JOIN')) {
+                lastJoinEndCol = CI.length + kw.length;  // 记录 JOIN 结束列，供 ON 对齐
                 const m = content.match(/^(.*?)\bON\b(.+)$/i);
                 if (m) return CI+kw+' '+formatSubqueryContent(m[1].trim(),opts)+'\n'+formatAndList(CI+'ON', m[2].trim(), CI+'  ', opts);
                 return CI+kw+' '+formatSubqueryContent(content, opts);
@@ -206,7 +216,10 @@ function formatCommaList(kw, content, opts) {
 function formatAndList(kw, content, andIndent, opts) {
     const parts = splitAndOr(content).map(s=>s.trim()).filter(Boolean);
     if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts);
-    if (parts.length===2 && (kw+' '+content).length<=60) return kw + ' ' + formatSubqueryContent(content, opts);
+    // 短行捷径：仅当内容本身就短（≤30）且无换行时合并单行
+    if (parts.length===2 && !content.includes('\n') && (kw+' '+content).length<=30) {
+        return kw + ' ' + formatSubqueryContent(content, opts);
+    }
     const lines = [];
     for (let i=0; i<parts.length; i++) {
         const partFormatted = formatSubqueryContent(parts[i], opts);
