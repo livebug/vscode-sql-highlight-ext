@@ -14,10 +14,11 @@ function protect(sql) {
     storeV=[]; storeC=[]; storeS=[]; storeO=[]; ciV=0; ciC=0; ciS=0; ciO=0;
     let w = sql;
     w = w.replace(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, m => { storeV.push(m); return '__V'+(ciV++)+'__'; });
+    // 字符串: 支持 SQL 标准 '' 转义，不跨行
+    w = w.replace(/'([^'\n]|'')*'/g, m => { storeS.push(m); return '__S'+(ciS++)+'__'; });
     // 行注释捕获尾部换行，用于后续还原换行
     w = w.replace(/--[^\n]*\n?/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     w = w.replace(/\/\*[\s\S]*?\*\//g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
-    w = w.replace(/'[^']*'/g, m => { storeS.push(m); return '__S'+(ciS++)+'__'; });
     return w;
 }
 
@@ -72,7 +73,7 @@ function uppercase(sql) {
 }
 
 // ======================== 从句拆分 ========================
-const MAIN_RE = /\b(SELECT|FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|NATURAL\s+JOIN|JOIN|ON|UNION|UNION\s+ALL|INTERSECT|EXCEPT|MINUS|DELETE|INSERT|INTO|UPDATE|SET)\b/gi;
+const MAIN_RE = /\b(SELECT|FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+OUTER\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|NATURAL\s+JOIN|JOIN|ON|UNION|UNION\s+ALL|INTERSECT|EXCEPT|MINUS|DELETE|INSERT|INTO|UPDATE|SET)\b/gi;
 
 function formatTop(sql, opts) {
     const segs = splitByClauses(sql);
@@ -178,7 +179,7 @@ function formatAndList(kw, content, andIndent, opts) {
 // ======================== 逗号/AND 分割 ========================
 function splitComma(text) { const r=[]; let d=0,cur=''; for (const ch of text) { if (ch==='(') d++; else if (ch===')') d--; if (ch===','&&d===0) { r.push(cur); cur=''; } else cur+=ch; } if (cur.trim()) r.push(cur); return r; }
 
-function splitAndOr(text) { const r=[]; let last=0; const re=/\b(AND|OR)\b/gi; let m; while ((m=re.exec(text))!==null) { let d=0; for (let i=last; i<m.index; i++) { if (text[i]==='(') d++; else if (text[i]===')') d--; } if (d===0) { r.push(text.slice(last, m.index)); last=m.index+m[0].length; } } r.push(text.slice(last)); return r.filter(s=>s.trim()); }
+function splitAndOr(text) { const r=[]; let last=0; const re=/\b(AND|OR|BETWEEN)\b/gi; let m, inBetween=false; while ((m=re.exec(text))!==null) { let d=0; for (let i=last; i<m.index; i++) { if (text[i]==='(') d++; else if (text[i]===')') d--; } if (d===0) { const kw=m[1].toUpperCase(); if (kw==='BETWEEN') { inBetween=true; continue; } if (inBetween && kw==='AND') { inBetween=false; continue; } r.push(text.slice(last, m.index)); last=m.index+m[0].length; inBetween=false; } } r.push(text.slice(last)); return r.filter(s=>s.trim()); }
 
 // ======================== 子查询递归 ========================
 function formatSubqueryContent(content, opts) {
@@ -204,6 +205,36 @@ function formatSubqueryContent(content, opts) {
 // ======================== 主入口 + 后处理 ========================
 function formatSQL(sql, options) {
     const opts = Object.assign({}, DEFAULTS, options||{});
+    // 按 ; 分割语句，逐条格式化，防止多语句合并
+    const stmts = splitSQLStatements(sql);
+    if (stmts.length <= 1) {
+        return formatSingleSQL(sql, opts);
+    }
+    const formattedStmts = stmts.map(stmt => formatSingleSQL(stmt, opts)).filter(Boolean);
+    let result = formattedStmts.join(';\n\n');
+    result = postProcess(result);
+    return result;
+}
+
+/**
+ * 按 ; 分割多条 SQL 语句，保留分号前的注释归属
+ */
+function splitSQLStatements(sql) {
+    // 使用保护机制来正确分割
+    const p = protect(sql);
+    // 在 ; 处分隔
+    const parts = p.split(/;/);
+    const stmts = [];
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (!part) continue;
+        stmts.push(restore(part));
+    }
+    return stmts;
+}
+
+function formatSingleSQL(sql, options) {
+    const opts = Object.assign({}, DEFAULTS, options||{});
     let w = protect(sql);
     w = w.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
     // 还原行注释后的换行（注释独占一行时，保持其独立成行）
@@ -221,7 +252,6 @@ function formatSQL(sql, options) {
     w = protectOver(w);
     w = formatTop(w, opts);
     w = restore(w);
-    w = postProcess(w);
     return w;
 }
 

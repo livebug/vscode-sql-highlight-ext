@@ -2,7 +2,7 @@
   "name": "sql-dialect-highlight",
   "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
   "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "sql-dialect-publisher",
   "license": "MIT",
   "repository": {
@@ -108,7 +108,11 @@
     }
   },
   "scripts": {
-    "package": "vsce package"
+    "package": "vsce package",
+    "test": "node test/agent.js --ci",
+    "test:verbose": "node test/agent.js --verbose",
+    "test:dir": "node test/agent.js --dir",
+    "test:format": "node test/agent.js --format-only"
   },
   "dependencies": {
     "sql-formatter": "^14.0.0",
