@@ -51,7 +51,7 @@ FROM ods_users u
 WHERE EXISTS (
     SELECT 1 FROM ods_order_header o
     WHERE o.user_id = u.id
-     AND o.order_amount > 500
+        AND o.order_amount > 500
 );
 
 -- 5. 子查询在 SELECT 字段中 (标量子查询)
@@ -74,7 +74,7 @@ FROM ods_users u
       , COUNT(*) AS cnt
     FROM ods_order_header WHERE dt = '2026-01-01' GROUP BY user_id
 ) o
-    ON u.id = o.user_id;
+           ON u.id = o.user_id;
 
 -- 7. 子查询 + UNION
 SELECT
