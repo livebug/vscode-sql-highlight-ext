@@ -14,7 +14,8 @@ function protect(sql) {
     storeV=[]; storeC=[]; storeS=[]; storeO=[]; ciV=0; ciC=0; ciS=0; ciO=0;
     let w = sql;
     w = w.replace(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, m => { storeV.push(m); return '__V'+(ciV++)+'__'; });
-    w = w.replace(/--[^\n]*/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
+    // 行注释捕获尾部换行，用于后续还原换行
+    w = w.replace(/--[^\n]*\n?/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     w = w.replace(/\/\*[\s\S]*?\*\//g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     w = w.replace(/'[^']*'/g, m => { storeS.push(m); return '__S'+(ciS++)+'__'; });
     return w;
@@ -205,6 +206,17 @@ function formatSQL(sql, options) {
     const opts = Object.assign({}, DEFAULTS, options||{});
     let w = protect(sql);
     w = w.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
+    // 还原行注释后的换行（注释独占一行时，保持其独立成行）
+    // 多行块注释也保持前后换行
+    w = w.replace(/__C(\d+)__/g, (m, num) => {
+        const c = storeC[parseInt(num)];
+        if (!c) return m;
+        // -- 行注释尾部有换行 → 保留换行
+        if (c.startsWith('--') && c.endsWith('\n')) return m + '\n';
+        // /* 多行块注释 */ → 前后加换行，确保独立成行
+        if (c.startsWith('/*') && c.includes('\n')) return '\n' + m + '\n';
+        return m;
+    });
     w = uppercase(w);
     w = protectOver(w);
     w = formatTop(w, opts);
