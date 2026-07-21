@@ -16,7 +16,7 @@ function protect(sql) {
     w = w.replace(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, m => { storeV.push(m); return '__V'+(ciV++)+'__'; });
     // 字符串: 支持 SQL 标准 '' 转义，不跨行
     w = w.replace(/'([^'\n]|'')*'/g, m => { storeS.push(m); return '__S'+(ciS++)+'__'; });
-    // 行注释捕获尾部换行，用于后续还原换行
+    // 行注释捕获尾部换行（; 分割前需要用）
     w = w.replace(/--[^\n]*\n?/g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     w = w.replace(/\/\*[\s\S]*?\*\//g, m => { storeC.push(m); return '__C'+(ciC++)+'__'; });
     return w;
@@ -153,16 +153,42 @@ function formatSegment(seg, opts) {
 
 // ======================== 列表格式化 ========================
 function formatCommaList(kw, content, opts) {
-    const items = splitComma(content).map(s=>s.trim()).filter(Boolean);
-    // 单行尝试：字段+关键字总长 ≤ 150 字符就放一行
-    const singleLine = kw + ' ' + items.join(', ');
-    if (singleLine.length <= 150) return singleLine;
+    let items = splitComma(content).map(s=>s.trim()).filter(Boolean);
 
-    // 超出才逗号优先拆分
+    // 拆分 "__C__ field" 为 [__C__, field]，注释独立成行
+    const expanded = [];
+    for (const item of items) {
+        const m = item.match(/^(__C\d+__)\s+(.+)$/);
+        if (m) {
+            expanded.push(m[1]);  // 注释占位符（restore 后变 -- comment\n）
+            expanded.push(m[2]);  // 字段
+        } else {
+            expanded.push(item);
+        }
+    }
+    items = expanded;
+
+    // 单行尝试：无行内注释时可用
+    const hasComment = items.some(s => /^__C\d+__$/.test(s));
+    if (!hasComment) {
+        const singleLine = kw + ' ' + items.join(', ');
+        if (singleLine.length <= 150) return singleLine;
+    }
+
+    // 逗号优先拆分
     const INDENT = ' '.repeat(opts.indentSize);
     const lines = [kw];
-    for (let i = 0; i < items.length; i++) {
-        lines.push((i === 0 ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ') + items[i]);
+    let firstField = true;
+    for (const item of items) {
+        if (/^__C\d+__$/.test(item)) {
+            // 纯注释行：不加逗号前缀，独立换行
+            lines.push(item);
+            firstField = true; // 注释后下一个字段用一级缩进
+        } else {
+            const prefix = firstField ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
+            lines.push(prefix + item);
+            firstField = false;
+        }
     }
     return lines.join('\n');
 }
@@ -236,17 +262,19 @@ function splitSQLStatements(sql) {
 function formatSingleSQL(sql, options) {
     const opts = Object.assign({}, DEFAULTS, options||{});
     let w = protect(sql);
+    // 压缩空白前，记录哪些 __C__ 是独立注释（前/后跟 \n 或头尾）
+    const standaloneComments = new Set();
+    let m;
+    const re = /(^|\n)__C(\d+)__(\n|$)/g;
+    while ((m = re.exec(w)) !== null) {
+        standaloneComments.add(parseInt(m[2]));
+    }
     w = w.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
-    // 还原行注释后的换行（注释独占一行时，保持其独立成行）
-    // 多行块注释也保持前后换行
-    w = w.replace(/__C(\d+)__/g, (m, num) => {
-        const c = storeC[parseInt(num)];
-        if (!c) return m;
-        // -- 行注释尾部有换行 → 保留换行
-        if (c.startsWith('--') && c.endsWith('\n')) return m + '\n';
-        // /* 多行块注释 */ → 前后加换行，确保独立成行
-        if (c.startsWith('/*') && c.includes('\n')) return '\n' + m + '\n';
-        return m;
+    // 独立注释前后加换行
+    w = w.replace(/__C(\d+)__/g, (match, num) => {
+        const idx = parseInt(num);
+        if (standaloneComments.has(idx)) return '\n' + match + '\n';
+        return match;
     });
     w = uppercase(w);
     w = protectOver(w);
