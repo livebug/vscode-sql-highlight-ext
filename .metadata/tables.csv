@@ -1,0 +1,6 @@
+database,schema,table_name,type,description
+mydb,public,users,TABLE,用户信息表
+mydb,public,orders,TABLE,订单表
+mydb,public,products,TABLE,商品表
+mydb,public,order_items,TABLE,订单明细表
+mydb,report,daily_summary,VIEW,日报汇总视图

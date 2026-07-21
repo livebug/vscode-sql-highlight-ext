@@ -1,5 +1,6 @@
 const vscode = require('vscode');
 const { formatSQL } = require('./formatter');
+const { loadMetadata } = require('./metadata-loader');
 
 /**
  * 激活扩展：注册 SQL 格式化器 + 语义高亮（表名/字段名）
@@ -280,6 +281,348 @@ function activate(context) {
     if (vscode.window.activeTextEditor) {
         updateBracketHighlight(vscode.window.activeTextEditor);
     }
+
+    // ========== 4. Hover + Definition: 表别名 & 临时表跳转 ==========
+    languages.forEach(lang => {
+        // 统一的 Hover: 别名提示原表，表名提示 CREATE 定义
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider(lang, {
+                provideHover(document, position) {
+                    const aliasHover = provideAliasHover(document, position);
+                    if (aliasHover) return aliasHover;
+                    return provideTableHover(document, position);
+                }
+            })
+        );
+        // 统一的 Definition: 别名跳转、临时表跳转到 CREATE
+        context.subscriptions.push(
+            vscode.languages.registerDefinitionProvider(lang, {
+                provideDefinition(document, position) {
+                    const aliasDef = provideAliasDefinition(document, position);
+                    if (aliasDef) return aliasDef;
+                    return provideTableDefinition(document, position);
+                }
+            })
+        );
+        // Completion: 基于 .metadata CSV 的表名/字段名补全
+        context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(lang, {
+                provideCompletionItems(document, position) {
+                    return doProvideCompletionItems(document, position);
+                }
+            }, '.', ' ', '\n', '\t', ',', '(')
+        );
+    });
+}
+
+/**
+ * 解析文档中所有表别名定义
+ * 返回 Map: 别名(小写) → { tableName, tableRange, aliasRange }
+ * 支持: FROM table_name alias, JOIN table_name AS alias
+ */
+function parseAliasDefinitions(document) {
+    const text = document.getText();
+    const aliasMap = new Map();
+    const keywords = new Set([
+        'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'EXISTS',
+        'BETWEEN', 'LIKE', 'RLIKE', 'REGEXP', 'AS', 'ON', 'JOIN',
+        'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'OUTER',
+        'SEMI', 'ANTI', 'UNION', 'ALL', 'INTERSECT', 'EXCEPT', 'MINUS',
+        'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+        'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'REPLACE', 'MERGE',
+        'GRANT', 'REVOKE', 'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET',
+        'FETCH', 'FOR', 'ASC', 'DESC', 'CASE', 'WHEN', 'THEN', 'ELSE',
+        'END', 'NULL', 'TRUE', 'FALSE', 'DISTINCT', 'ANY', 'SOME',
+        'WITH', 'RECURSIVE', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE',
+        'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'LATERAL',
+        'TABLE', 'VIEW', 'SCHEMA', 'DATABASE', 'TEMP', 'TEMPORARY',
+        'BEGIN', 'CALL', 'COMMIT', 'ROLLBACK', 'SAVEPOINT',
+        'DEFAULT', 'CASCADE', 'RESTRICT', 'PURGE', 'IF', 'COMMENT',
+        'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'INDEX', 'CONSTRAINT',
+        'CHECK', 'UNIQUE', 'ADD', 'COLUMN', 'RENAME', 'TO',
+        'IS', 'NOT', 'NULLS', 'FIRST', 'LAST', 'HAVING',
+        'ON', 'USING', 'NATURAL', 'INNER', 'CROSS', 'OUTER',
+    ]);
+
+    // 保护注释和字符串，防止误匹配
+    let clean = text;
+    clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
+
+    // 匹配 FROM/JOIN table_name [[AS] alias] 和逗号分隔 table_name alias 模式
+    // 模式1: FROM|JOIN table_name alias / FROM|JOIN table_name AS alias
+    // 模式2: , table_name alias (逗号分隔的多表)
+    const tableAliasRe = /(?:FROM|JOIN|,)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+(?:(AS)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*(?:,|JOIN|ON|WHERE|GROUP|HAVING|ORDER|LIMIT|LEFT|RIGHT|INNER|CROSS|FULL|NATURAL|$))/gi;
+    let m;
+    while ((m = tableAliasRe.exec(clean)) !== null) {
+        const tableName = m[1];
+        const alias = m[3];
+        const hasAS = !!m[2];
+        // 跳过关键字别名
+        if (keywords.has(alias.toUpperCase())) continue;
+
+        const aliasLower = alias.toLowerCase();
+        // 如果多个表有相同别名，只保留第一个（或合并）
+        if (!aliasMap.has(aliasLower)) {
+            const tableStart = m.index + m[0].indexOf(tableName);
+            const tableRange = new vscode.Range(
+                document.positionAt(tableStart),
+                document.positionAt(tableStart + tableName.length)
+            );
+
+            // 定位别名在原始字符串中的位置
+            const aliasIdx = m.index + m[0].lastIndexOf(alias);
+            const aliasRange = new vscode.Range(
+                document.positionAt(aliasIdx),
+                document.positionAt(aliasIdx + alias.length)
+            );
+
+            aliasMap.set(aliasLower, { tableName, tableRange, aliasRange, hasAS });
+        }
+    }
+
+    return aliasMap;
+}
+
+/**
+ * Hover: 悬浮在表别名上 → 显示原表名
+ */
+function provideAliasHover(document, position) {
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_]*/);
+    if (!wordRange) return null;
+
+    const word = document.getText(wordRange);
+    const aliasMap = parseAliasDefinitions(document);
+
+    // 检查悬浮的词是否是别名定义位置
+    const aliasLower = word.toLowerCase();
+    const def = aliasMap.get(aliasLower);
+    if (!def) return null;
+
+    // 检查光标是否确实在别名定义或使用位置
+    // 如果是别名定义本身，显示"别名定义"；如果是使用位置则显示"跳转到"
+    const isOnDefinition = def.aliasRange.contains(position);
+
+    const markdown = new vscode.MarkdownString();
+    markdown.isTrusted = true;
+    markdown.supportHtml = true;
+
+    if (isOnDefinition) {
+        markdown.appendMarkdown(`**表别名:** \`${word}\` → 表 \`${def.tableName}\`\n\n*Ctrl+Click / F12 跳转到表名定义*`);
+        return new vscode.Hover(markdown, def.aliasRange);
+    } else {
+        // 使用位置：显示原表并提供跳转
+        markdown.appendMarkdown(`**别名:** \`${word}\` → 原表 \`${def.tableName}\`\n\n*点击跳转或按 F12 查看别名定义*`);
+        return new vscode.Hover(markdown);
+    }
+}
+
+/**
+ * Definition: F12 / Ctrl+Click 跳转到别名定义处
+ */
+function provideAliasDefinition(document, position) {
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_]*/);
+    if (!wordRange) return null;
+
+    const word = document.getText(wordRange);
+    const aliasMap = parseAliasDefinitions(document);
+
+    const def = aliasMap.get(word.toLowerCase());
+    if (!def) return null;
+
+    // 如果已经在定义上，跳转到表名
+    if (def.aliasRange.contains(position)) {
+        return new vscode.Location(document.uri, def.tableRange);
+    }
+
+    // 否则跳转到别名定义（实际跳转到表名位置，显示完整上下文）
+    return new vscode.Location(document.uri, def.aliasRange);
+}
+
+// ========== 临时表 / CREATE TABLE 定义跳转 ==========
+
+/**
+ * 解析文档中所有 CREATE TABLE / CREATE TEMP TABLE / CREATE TEMPORARY TABLE 定义
+ * 返回 Map: 表名(小写) → { tableName, fullCreateRange, tableNameRange, createText }
+ */
+function parseCreateTableDefs(document) {
+    const text = document.getText();
+    const defs = new Map();
+
+    // 保护注释和字符串
+    let clean = text;
+    clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
+
+    const re = /\bCREATE\s+(?:TEMPORARY|TEMP|LOCAL\s+TEMPORARY|GLOBAL\s+TEMPORARY)?\s*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\b/gi;
+    let m;
+    while ((m = re.exec(clean)) !== null) {
+        const tableName = m[1];
+        const key = tableName.toLowerCase();
+        const tableNameStart = m.index + m[0].indexOf(tableName);
+
+        // 找到 CREATE 语句的结束位置（匹配到 ; 或文档结尾）
+        let endPos = text.length;
+        const semiIdx = text.indexOf(';', m.index);
+        if (semiIdx !== -1) endPos = semiIdx + 1;
+
+        // 如果找到更早的 CREATE 或 DROP 则提前结束
+        const nextCreate = text.slice(m.index + 1).search(/\bCREATE\s/i);
+        const nextDrop = text.slice(m.index + 1).search(/\bDROP\s/i);
+        let nextBoundary = Infinity;
+        if (nextCreate !== -1) nextBoundary = Math.min(nextBoundary, m.index + 1 + nextCreate);
+        if (nextDrop !== -1) nextBoundary = Math.min(nextBoundary, m.index + 1 + nextDrop);
+        if (nextBoundary < endPos) endPos = nextBoundary;
+
+        const fullCreateRange = new vscode.Range(
+            document.positionAt(m.index),
+            document.positionAt(endPos)
+        );
+        const tableNameRange = new vscode.Range(
+            document.positionAt(tableNameStart),
+            document.positionAt(tableNameStart + tableName.length)
+        );
+        // 取一个合理的显示摘要（截断 CREATE 语句前200字符）
+        const createText = text.slice(m.index, Math.min(endPos, m.index + 200)).trim()
+            + (endPos > m.index + 200 ? '...' : '');
+
+        defs.set(key, { tableName, fullCreateRange, tableNameRange, createText });
+    }
+    return defs;
+}
+
+/**
+ * Hover: 悬浮在表名上 → 如果是 CREATE TABLE 定义的，显示定义摘要
+ */
+function provideTableHover(document, position) {
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_.]*/);
+    if (!wordRange) return null;
+    const word = document.getText(wordRange);
+
+    const createDefs = parseCreateTableDefs(document);
+    const def = createDefs.get(word.toLowerCase());
+    if (!def) return null;
+
+    // 如果在 CREATE 语句定义处，显示"定义"
+    const isOnCreateDef = def.tableNameRange.contains(position);
+    const markdown = new vscode.MarkdownString();
+    markdown.isTrusted = true;
+    markdown.supportHtml = true;
+
+    if (isOnCreateDef) {
+        markdown.appendMarkdown(`**表定义:** \`${def.tableName}\`\n\n\`\`\`sql\n${def.createText}\n\`\`\``);
+        return new vscode.Hover(markdown, def.tableNameRange);
+    }
+    markdown.appendMarkdown(`**表:** \`${def.tableName}\` → *已在本文档定义*\n\n\`\`\`sql\n${def.createText}\n\`\`\`\n\n*Ctrl+Click / F12 跳转到 CREATE 语句*`);
+    return new vscode.Hover(markdown);
+}
+
+/**
+ * Definition: F12 / Ctrl+Click 跳转到 CREATE TABLE 定义
+ */
+function provideTableDefinition(document, position) {
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_.]*/);
+    if (!wordRange) return null;
+    const word = document.getText(wordRange);
+
+    const createDefs = parseCreateTableDefs(document);
+    const def = createDefs.get(word.toLowerCase());
+    if (!def) return null;
+
+    return new vscode.Location(document.uri, def.tableNameRange);
+}
+
+// ========== 基于 .metadata CSV 的代码补全 ==========
+
+/**
+ * 代码补全: 从 .metadata/*.csv 加载数据字典，提供表名 + 字段名补全
+ */
+function doProvideCompletionItems(document, position) {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspaceFolder) return [];
+
+    const metadata = loadMetadata(workspaceFolder.uri.fsPath);
+    if (!metadata || !metadata.tables || metadata.tables.size === 0) return [];
+
+    const items = [];
+    const rangeUntilCursor = new vscode.Range(
+        new vscode.Position(position.line, 0),
+        position
+    );
+    const textBeforeCursor = document.getText(rangeUntilCursor);
+    const upperBefore = textBeforeCursor.toUpperCase();
+
+    // ---- 判断补全上下文 ----
+    // 上下文1: SELECT ... FROM/JOIN 之后 → 补全表名
+    // 上下文2: SELECT ... table_alias.column → 补全字段名
+    // 上下文3: 逗号分隔 → 补全字段名
+
+    const isAfterFromJoin = /\b(FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+$/i.test(textBeforeCursor)
+        || /\b(FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+[^,\s]+\s*$/i.test(textBeforeCursor)
+        || /,\s*$/i.test(textBeforeCursor) && /\b(FROM|JOIN)\b/i.test(upperBefore);
+
+    const dotMatch = textBeforeCursor.match(/([a-zA-Z_][a-zA-Z0-9_]*)\.\s*$/);
+
+    if (dotMatch) {
+        // 表别名. 之后 → 补全该表的字段
+        const prefix = dotMatch[1].toLowerCase();
+        // 先解析别名映射，找到真实表名
+        const aliasMap = parseAliasDefinitions(document);
+        const resolvedName = aliasMap.has(prefix) ? aliasMap.get(prefix).tableName.toLowerCase() : prefix;
+        const columns = metadata.columns.get(resolvedName);
+        if (columns && columns.length > 0) {
+            for (const col of columns) {
+                const item = new vscode.CompletionItem(col.column_name, vscode.CompletionItemKind.Field);
+                item.detail = `${col.data_type}${col.nullable ? '' : ' NOT NULL'}${col.default_value ? ' DEFAULT ' + col.default_value : ''}`;
+                item.documentation = new vscode.MarkdownString(
+                    `**${col.table_name}.${col.column_name}**  \n` +
+                    `类型: \`${col.data_type}\`${col.nullable ? ' 可空' : ' 不可空'}  \n` +
+                    `${col.default_value ? '默认值: `' + col.default_value + '`  \n' : ''}` +
+                    `${col.description || ''}`
+                );
+                item.sortText = '0' + col.column_name;
+                items.push(item);
+            }
+        }
+    } else if (isAfterFromJoin) {
+        // FROM/JOIN 之后 → 补全表名
+        for (const [key, t] of metadata.tables) {
+            const item = new vscode.CompletionItem(t.table_name, vscode.CompletionItemKind.Class);
+            item.detail = `${t.type}${t.schema ? ' · ' + t.schema : ''}${t.database ? '@' + t.database : ''}`;
+            item.documentation = new vscode.MarkdownString(
+                `**${t.table_name}**  \n` +
+                `类型: ${t.type}  \n` +
+                `${t.schema ? 'Schema: `' + t.schema + '`  \n' : ''}` +
+                `${t.database ? 'Database: `' + t.database + '`  \n' : ''}` +
+                `${t.description || ''}`
+            );
+            item.sortText = '0' + t.table_name;
+            items.push(item);
+        }
+    } else if (/\bSELECT\b/i.test(upperBefore)) {
+        // SELECT 之后 → 列出所有表的所有字段（全局字段补全）
+        const seen = new Set();
+        for (const [tableKey, cols] of metadata.columns) {
+            if (!cols || cols.length === 0) continue;
+            for (const col of cols) {
+                if (seen.has(col.column_name)) continue;
+                seen.add(col.column_name);
+                const item = new vscode.CompletionItem(col.column_name, vscode.CompletionItemKind.Field);
+                item.detail = `${col.data_type} · ${col.table_name}`;
+                item.documentation = new vscode.MarkdownString(
+                    `**${col.table_name}.${col.column_name}**  \n` +
+                    `类型: \`${col.data_type}\`${col.nullable ? ' 可空' : ' 不可空'}  \n` +
+                    `${col.description || ''}`
+                );
+                item.sortText = '1' + col.column_name;
+                items.push(item);
+            }
+        }
+    }
+
+    return items;
 }
 
 // ---- 语义 Token 提供 ----
@@ -365,6 +708,8 @@ function provideSemanticTokens(document, legend) {
     return builder.build();
 }
 
-function deactivate() {}
+function deactivate() {
+    require('./metadata-loader').clearCache();
+}
 
 module.exports = { activate, deactivate };

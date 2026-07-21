@@ -334,6 +334,15 @@ function formatSingleSQL(sql, options) {
 }
 
 function postProcess(sql) {
+    // 先保护注释，防止 postProcess 的正则误伤注释中的分号
+    const pcStore = [], pcStrings = [];
+    let pci = 0, psi = 0;
+    // 保护字符串
+    sql = sql.replace(/'([^'\n]|'')*'/g, m => { pcStrings.push(m); return '__PS'+(psi++)+'__'; });
+    // 保护行注释和块注释
+    sql = sql.replace(/--[^\n]*/g, m => { pcStore.push(m); return '__PC'+(pci++)+'__'; });
+    sql = sql.replace(/\/\*[\s\S]*?\*\//g, m => { pcStore.push(m); return '__PC'+(pci++)+'__'; });
+
     sql = sql.replace(/\*\/\s+(\S)/g, '*/\n$1');
     sql = sql.replace(/\n\s*;/g, ';');   // 分号提到前行
     sql = sql.replace(/\s+;/g, ';');
@@ -342,6 +351,10 @@ function postProcess(sql) {
     // 语句间空行
     sql = sql.replace(/;(\s*\n\s*)(?=\S)/g, ';\n\n');
     sql = sql.replace(/\n{3,}/g, '\n\n');
+
+    // 恢复注释和字符串
+    pcStore.forEach((v, i) => { sql = sql.replace('__PC'+i+'__', v); });
+    pcStrings.forEach((v, i) => { sql = sql.replace('__PS'+i+'__', v); });
     return sql;
 }
 
