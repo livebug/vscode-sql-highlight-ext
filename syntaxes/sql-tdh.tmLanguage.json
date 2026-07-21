@@ -3,6 +3,7 @@
   "name": "SQL (TDH)",
   "scopeName": "source.sql.tdh",
   "patterns": [
+    { "include": "#brackets" },
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#numbers" },
@@ -16,6 +17,18 @@
     { "include": "#identifiers" }
   ],
   "repository": {
+    "brackets": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.bracket.begin keyword.control.sql",
+          "match": "(?i)\\b(CASE|BEGIN|WHEN)\\b"
+        },
+        {
+          "name": "punctuation.definition.bracket.end keyword.control.sql",
+          "match": "(?i)\\b(END|THEN)\\b"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {
@@ -90,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.sql",
-          "match": "(?i)\\b(TABLE|VIEW|SCHEMA|DATABASE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|RLIKE|REGEXP|IS\\s+NULL|IS\\s+NOT\\s+NULL|AS|ON|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|LEFT\\s+SEMI\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|CASE|WHEN|THEN|ELSE|END|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|LATERAL)\\b"
+          "match": "(?i)\\b(TABLE|VIEW|SCHEMA|DATABASE|SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|RLIKE|REGEXP|IS\\s+NULL|IS\\s+NOT\\s+NULL|AS|ON|JOIN|INNER\\s+JOIN|LEFT\\s+JOIN|LEFT\\s+OUTER\\s+JOIN|LEFT\\s+SEMI\\s+JOIN|RIGHT\\s+JOIN|RIGHT\\s+OUTER\\s+JOIN|FULL\\s+JOIN|FULL\\s+OUTER\\s+JOIN|CROSS\\s+JOIN|NATURAL\\s+JOIN|UNION|UNION\\s+ALL|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|FETCH|FOR|ASC|DESC|NULLS\\s+FIRST|NULLS\\s+LAST|WHEN|THEN|ELSE|NULL|TRUE|FALSE|DISTINCT|ALL|ANY|SOME|WITH|RECURSIVE|WINDOW|OVER|PARTITION\\s+BY|ROWS|RANGE|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT\\s+ROW|LATERAL)\\b"
         }
       ]
     },
@@ -129,16 +142,16 @@
     "identifiers": {
       "patterns": [
         {
-          "name": "entity.name.function.sql",
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
-        },
-        {
           "name": "entity.name.dblink.tdh.sql",
           "match": "\\b([a-zA-Z_][a-zA-Z0-9_.]*)\\s*@\\s*([a-zA-Z_][a-zA-Z0-9_]*)"
         },
         {
           "name": "keyword.operator.dblink.tdh.sql",
           "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "name": "entity.name.function.sql",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
         },
         { "include": "#variables" }
       ]
