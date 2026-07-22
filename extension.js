@@ -131,6 +131,18 @@ function activate(context) {
     logger.info('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
     vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
 
+    // ========== 2.5 文档大纲 (Document Symbol) ==========
+    logger.info('[大纲] 注册文档符号提供器...');
+    languages.forEach(lang => {
+        context.subscriptions.push(
+            vscode.languages.registerDocumentSymbolProvider(lang, {
+                provideDocumentSymbols(document) {
+                    return provideSQLDocumentSymbols(document);
+                }
+            })
+        );
+    });
+
     // ========== 3. CASE/BEGIN ↔ END 与 WHEN ↔ THEN 括号配对高亮 ==========
     logger.info('[括号配对] 注册 CASE↔END, BEGIN↔END, WHEN↔THEN 配对高亮...');
     const bracketHighlight = vscode.window.createTextEditorDecorationType({
@@ -376,8 +388,9 @@ function parseAliasDefinitions(document) {
         'ON', 'USING', 'NATURAL', 'INNER', 'CROSS', 'OUTER',
     ]);
 
-    // 保护注释和字符串，防止误匹配
+    // 保护注释、字符串、变量，防止误匹配
     let clean = text;
+    clean = clean.replace(/\$\{[^}]*\}(?:\.)?/g, m => ' '.repeat(m.length));
     clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
     clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
     clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
@@ -485,8 +498,9 @@ function parseCreateTableDefs(document) {
     const text = document.getText();
     const defs = new Map();
 
-    // 保护注释和字符串
+    // 保护注释、字符串、变量，防止误匹配
     let clean = text;
+    clean = clean.replace(/\$\{[^}]*\}(?:\.)?/g, m => ' '.repeat(m.length));
     clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
     clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
     clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
@@ -704,14 +718,17 @@ function provideSemanticTokens(document, legend) {
         if (!trimmed || trimmed.startsWith('--')) continue;
 
         const upper = trimmed.toUpperCase();
+        // 保护变量，防止 ${VAR} 干扰标识符匹配
+        const cleanUpper = upper.replace(/\$\{[^}]*\}(?:\.)?/g, m => ' '.repeat(m.length));
 
         // (A) FROM / JOIN / INTO / UPDATE / TABLE / TRUNCATE / DESCRIBE 后的标识符 → 表名 (class)
         const tableContextRegex = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/gi;
         let m;
-        while ((m = tableContextRegex.exec(upper)) !== null) {
+        while ((m = tableContextRegex.exec(cleanUpper)) !== null) {
             const word = m[1];
             if (keywords.has(word.toUpperCase())) continue;
-            const start = trimmed.indexOf(word);
+            // 在原始 upper 中定位（变量被替换为空格后位置偏移，但标识符部分位置不变）
+            const start = upper.indexOf(word, m.index - 5); // 从附近开始搜索
             if (start !== -1) {
                 builder.push(i, indentLen + start, word.length, 0, 0);
             }
@@ -719,12 +736,12 @@ function provideSemanticTokens(document, legend) {
 
         // (B) 表别名声明（表名后有空格+短标识符，非关键字）→ variable.declaration
         const aliasDeclRegex = /\b([a-zA-Z_][a-zA-Z0-9_.]*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
-        while ((m = aliasDeclRegex.exec(upper)) !== null) {
+        while ((m = aliasDeclRegex.exec(cleanUpper)) !== null) {
             const alias = m[2];
             if (keywords.has(alias.toUpperCase())) continue;
-            const before = trimmed.substring(0, m.index).trimEnd();
+            const before = cleanUpper.substring(0, m.index).trimEnd();
             if (before.endsWith(' AS') || before.endsWith(' as')) continue;
-            const start = trimmed.indexOf(alias, m.index + m[1].length);
+            const start = upper.indexOf(alias, m.index + m[1].length - 5);
             if (start !== -1 && alias.length <= 20) {
                 builder.push(i, indentLen + start, alias.length, 2, 0);
             }
@@ -753,6 +770,79 @@ function provideSemanticTokens(document, legend) {
     const tokens = builder.build();
     logger.debug(`[语义高亮] 完成, 共 ${tokens.length} 个 token`, { lang: document.languageId });
     return tokens;
+}
+
+// ========== 文档大纲 (Document Symbol) ==========
+
+/**
+ * 提供文档大纲（面包屑导航 & 大纲视图）
+ * 识别: CREATE TABLE/VIEW, WITH CTE, 分隔注释
+ */
+function provideSQLDocumentSymbols(document) {
+    const symbols = [];
+    const text = document.getText();
+
+    // 保护字符串和注释，防止误匹配
+    let clean = text;
+    clean = clean.replace(/\$\{[^}]*\}(?:\.)?/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
+    clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
+
+    // ------ 1. CREATE TABLE / VIEW / TEMP TABLE ------
+    const createRe = /\bCREATE\s+(?:(?:LOCAL\s+|GLOBAL\s+)?(?:TEMPORARY|TEMP)\s+)?(TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\b/gi;
+    let m;
+    while ((m = createRe.exec(clean)) !== null) {
+        const objType = m[1].toUpperCase();
+        const name = m[2];
+        const startPos = document.positionAt(m.index);
+        // 找到 CREATE 语句结束位置（分号或下一个 CREATE/DROP 或文档尾）
+        let endIdx = text.length;
+        const semiIdx = text.indexOf(';', m.index);
+        if (semiIdx !== -1) endIdx = semiIdx + 1;
+        const endPos = document.positionAt(Math.min(endIdx, text.length));
+
+        const range = new vscode.Range(startPos, endPos);
+        const selectionRange = new vscode.Range(
+            document.positionAt(m.index + m[0].indexOf(name)),
+            document.positionAt(m.index + m[0].indexOf(name) + name.length)
+        );
+
+        const kind = objType === 'VIEW' ? vscode.SymbolKind.Interface : vscode.SymbolKind.Struct;
+        const label = objType === 'VIEW' ? `📋 ${name}` : `📦 ${name}`;
+        symbols.push(new vscode.DocumentSymbol(
+            label, objType === 'VIEW' ? 'VIEW' : 'TABLE', kind, range, selectionRange
+        ));
+    }
+
+    // ------ 2. WITH CTE 子句 ------
+    // 匹配: WITH cte_name AS ( 或 , cte_name AS (
+    const cteRe = /(?:^|\bWITH\b|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+AS\s*\(/gi;
+    while ((m = cteRe.exec(clean)) !== null) {
+        const cteName = m[1];
+        const startPos = document.positionAt(m.index);
+        // 找到匹配的 )
+        let depth = 0, endIdx = m.index + m[0].length - 1; // 从 ( 开始
+        let found = false;
+        for (let i = endIdx; i < text.length; i++) {
+            if (text[i] === '(') depth++;
+            else if (text[i] === ')') { depth--; if (depth === 0) { endIdx = i + 1; found = true; break; } }
+        }
+        if (!found) endIdx = text.length;
+        const endPos = document.positionAt(Math.min(endIdx, text.length));
+
+        const range = new vscode.Range(startPos, endPos);
+        const selectionRange = new vscode.Range(
+            document.positionAt(m.index + m[0].indexOf(cteName)),
+            document.positionAt(m.index + m[0].indexOf(cteName) + cteName.length)
+        );
+        symbols.push(new vscode.DocumentSymbol(
+            `🔷 ${cteName}`, 'CTE', vscode.SymbolKind.Module, range, selectionRange
+        ));
+    }
+
+    logger.debug(`[大纲] 生成 ${symbols.length} 个符号`, { lang: document.languageId });
+    return symbols;
 }
 
 function deactivate() {
