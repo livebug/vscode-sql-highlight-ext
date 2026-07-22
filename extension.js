@@ -1,17 +1,21 @@
 const vscode = require('vscode');
 const { formatSQL } = require('./formatter');
 const { loadMetadata } = require('./metadata-loader');
+const logger = require('./logger');
 
 /**
  * 激活扩展：注册 SQL 格式化器 + 语义高亮（表名/字段名）
  */
 function activate(context) {
+    logger.init(context);
+    logger.info('SQL Dialect Highlight 扩展开始激活...');
     const languages = ['sql-tdh', 'sql-gaussdb'];
 
     // ========== 1. SQL 格式化 (全文 + 选区) ==========
     languages.forEach(lang => {
         const formatProvider = {
             provideDocumentFormattingEdits(document) {
+                logger.info('[格式化] 全文格式化开始', { lang, file: document.fileName });
                 const text = document.getText();
                 const config = vscode.workspace.getConfiguration('sqlDialectHighlight.format');
                 try {
@@ -26,13 +30,16 @@ function activate(context) {
                         document.positionAt(0),
                         document.positionAt(text.length)
                     );
+                    logger.info('[格式化] 全文格式化成功', { lang, origLen: text.length, formattedLen: formatted.length });
                     return [vscode.TextEdit.replace(fullRange, formatted)];
                 } catch (e) {
+                    logger.error(`[格式化] 全文格式化失败: ${e.message}`, { lang, stack: e.stack });
                     vscode.window.showErrorMessage('SQL 格式化失败: ' + e.message);
                     return [];
                 }
             },
             provideDocumentRangeFormattingEdits(document, range) {
+                logger.info('[格式化] 选区格式化开始', { lang, file: document.fileName, sLine: range.start.line, eLine: range.end.line });
                 const config = vscode.workspace.getConfiguration('sqlDialectHighlight.format');
                 try {
                     // 获取选区文本及所在行的缩进
@@ -78,8 +85,10 @@ function activate(context) {
                         startLine, 0,
                         endLine, document.lineAt(endLine).text.length
                     );
+                    logger.info('[格式化] 选区格式化成功', { lang, baseIndent, lineCount: endLine - startLine + 1 });
                     return [vscode.TextEdit.replace(fullRange, result)];
                 } catch (e) {
+                    logger.error(`[格式化] 选区格式化失败: ${e.message}`, { lang, stack: e.stack });
                     vscode.window.showErrorMessage('选区格式化失败: ' + e.message);
                     return [];
                 }
@@ -119,9 +128,11 @@ function activate(context) {
         );
     });
 
+    logger.info('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
     vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
 
     // ========== 3. CASE/BEGIN ↔ END 与 WHEN ↔ THEN 括号配对高亮 ==========
+    logger.info('[括号配对] 注册 CASE↔END, BEGIN↔END, WHEN↔THEN 配对高亮...');
     const bracketHighlight = vscode.window.createTextEditorDecorationType({
         backgroundColor: 'rgba(100, 180, 255, 0.15)',
         border: '1px solid rgba(100, 180, 255, 0.6)',
@@ -267,6 +278,9 @@ function activate(context) {
         }
 
         const matchRange = findMatchingBracket(editor.document, wordRange, word);
+        if (matchRange) {
+            logger.debug(`[括号配对] 匹配: ${word} ↔ ${editor.document.getText(matchRange)}`, { pos: { line: pos.line, char: pos.character } });
+        }
         editor.setDecorations(bracketHighlight, matchRange ? [wordRange, matchRange] : []);
     }
 
@@ -289,8 +303,15 @@ function activate(context) {
             vscode.languages.registerHoverProvider(lang, {
                 provideHover(document, position) {
                     const aliasHover = provideAliasHover(document, position);
-                    if (aliasHover) return aliasHover;
-                    return provideTableHover(document, position);
+                    if (aliasHover) {
+                        logger.debug('[Hover] 别名悬浮提示', { lang, line: position.line });
+                        return aliasHover;
+                    }
+                    const tableHover = provideTableHover(document, position);
+                    if (tableHover) {
+                        logger.debug('[Hover] 表定义悬浮提示', { lang, line: position.line });
+                    }
+                    return tableHover;
                 }
             })
         );
@@ -299,8 +320,15 @@ function activate(context) {
             vscode.languages.registerDefinitionProvider(lang, {
                 provideDefinition(document, position) {
                     const aliasDef = provideAliasDefinition(document, position);
-                    if (aliasDef) return aliasDef;
-                    return provideTableDefinition(document, position);
+                    if (aliasDef) {
+                        logger.info('[定义跳转] 别名跳转', { lang, line: position.line });
+                        return aliasDef;
+                    }
+                    const tableDef = provideTableDefinition(document, position);
+                    if (tableDef) {
+                        logger.info('[定义跳转] 表定义跳转', { lang, line: position.line });
+                    }
+                    return tableDef;
                 }
             })
         );
@@ -308,7 +336,11 @@ function activate(context) {
         context.subscriptions.push(
             vscode.languages.registerCompletionItemProvider(lang, {
                 provideCompletionItems(document, position) {
-                    return doProvideCompletionItems(document, position);
+                    const items = doProvideCompletionItems(document, position);
+                    if (items && items.length > 0) {
+                        logger.debug(`[补全] 提供 ${items.length} 个候选项`, { lang, line: position.line, char: position.character });
+                    }
+                    return items;
                 }
             }, '.', ' ', '\n', '\t', ',', '(')
         );
@@ -394,6 +426,7 @@ function provideAliasHover(document, position) {
 
     const word = document.getText(wordRange);
     const aliasMap = parseAliasDefinitions(document);
+    logger.debug(`[Hover] parseAliasDefinitions 找到 ${aliasMap.size} 个别名定义`);
 
     // 检查悬浮的词是否是别名定义位置
     const aliasLower = word.toLowerCase();
@@ -433,10 +466,12 @@ function provideAliasDefinition(document, position) {
 
     // 如果已经在定义上，跳转到表名
     if (def.aliasRange.contains(position)) {
+        logger.info(`[定义跳转] 别名 '${word}' → 原表 '${def.tableName}'`);
         return new vscode.Location(document.uri, def.tableRange);
     }
 
     // 否则跳转到别名定义（实际跳转到表名位置，显示完整上下文）
+    logger.info(`[定义跳转] '${word}' → 别名定义处`);
     return new vscode.Location(document.uri, def.aliasRange);
 }
 
@@ -502,6 +537,7 @@ function provideTableHover(document, position) {
     const word = document.getText(wordRange);
 
     const createDefs = parseCreateTableDefs(document);
+    logger.debug(`[Hover] parseCreateTableDefs 找到 ${createDefs.size} 个 CREATE TABLE 定义`);
     const def = createDefs.get(word.toLowerCase());
     if (!def) return null;
 
@@ -531,6 +567,7 @@ function provideTableDefinition(document, position) {
     const def = createDefs.get(word.toLowerCase());
     if (!def) return null;
 
+    logger.info(`[定义跳转] 表名 '${word}' → CREATE TABLE 定义`);
     return new vscode.Location(document.uri, def.tableNameRange);
 }
 
@@ -541,10 +578,17 @@ function provideTableDefinition(document, position) {
  */
 function doProvideCompletionItems(document, position) {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!workspaceFolder) return [];
+    if (!workspaceFolder) {
+        logger.debug('[补全] 未找到工作区，跳过');
+        return [];
+    }
 
     const metadata = loadMetadata(workspaceFolder.uri.fsPath);
-    if (!metadata || !metadata.tables || metadata.tables.size === 0) return [];
+    if (!metadata || !metadata.tables || metadata.tables.size === 0) {
+        logger.debug('[补全] 无 .metadata CSV 数据', { tables: metadata?.tables?.size || 0, cols: metadata?.columns?.size || 0 });
+        return [];
+    }
+    logger.debug(`[补全] 加载元数据: ${metadata.tables.size} 张表, ${metadata.columns.size} 个有字段定义的表`);
 
     const items = [];
     const rangeUntilCursor = new vscode.Range(
@@ -627,6 +671,7 @@ function doProvideCompletionItems(document, position) {
 
 // ---- 语义 Token 提供 ----
 function provideSemanticTokens(document, legend) {
+    logger.debug('[语义高亮] 开始分析', { lang: document.languageId, file: document.fileName });
     const builder = new vscode.SemanticTokensBuilder(legend);
     const text = document.getText();
     const lines = text.split('\n');
@@ -705,10 +750,13 @@ function provideSemanticTokens(document, legend) {
         }
     }
 
-    return builder.build();
+    const tokens = builder.build();
+    logger.debug(`[语义高亮] 完成, 共 ${tokens.length} 个 token`, { lang: document.languageId });
+    return tokens;
 }
 
 function deactivate() {
+    logger.info('SQL Dialect Highlight 扩展停用');
     require('./metadata-loader').clearCache();
 }
 

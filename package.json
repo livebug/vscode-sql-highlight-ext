@@ -103,10 +103,27 @@
             "preserve"
           ],
           "description": "关键字大小写"
+        },
+        "sqlDialectHighlight.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "日志级别（debug/info/warn/error）"
         }
       }
     }
   },
+  "commands": [
+    {
+      "command": "sqlDialectHighlight.showLog",
+      "title": "SQL Dialect Highlight: 显示日志"
+    }
+  ],
   "scripts": {
     "package": "vsce package",
     "test": "node test/agent.js --ci",
