@@ -1,0 +1,12 @@
+.vscode/**
+.vscode-test/**
+.gitignore
+.vscodeignore
+*.vsix
+.git/**
+.github/**
+test/**
+testdata/**
+test-harness/**
+.metadata/**
+node_modules/.cache/**

@@ -1,0 +1,89 @@
+[
+  {
+    "file": "semantic-test.sql",
+    "filePath": "testdata/sql/semantic-test.sql",
+    "timestamp": "2026-07-21T07:23:23.132Z",
+    "checks": [
+      {
+        "name": "关键字计数",
+        "status": "PASS"
+      },
+      {
+        "name": "变量引用",
+        "status": "PASS"
+      },
+      {
+        "name": "字符串字面量",
+        "status": "PASS"
+      },
+      {
+        "name": "反引号标识符",
+        "status": "PASS"
+      },
+      {
+        "name": "语句数量",
+        "status": "PASS"
+      }
+    ],
+    "issues": {
+      "semantic": [],
+      "formatting": [],
+      "warnings": []
+    },
+    "passed": true,
+    "summary": {
+      "totalChecks": 5,
+      "passedChecks": 5,
+      "failedChecks": 0,
+      "formattingIssues": 0,
+      "semanticIssues": 0,
+      "overall": "PASS"
+    }
+  },
+  {
+    "file": "subquery_test.sql",
+    "filePath": "testdata/sql/subquery_test.sql",
+    "timestamp": "2026-07-21T07:23:23.140Z",
+    "checks": [
+      {
+        "name": "关键字计数",
+        "status": "PASS"
+      },
+      {
+        "name": "变量引用",
+        "status": "PASS"
+      },
+      {
+        "name": "字符串字面量",
+        "status": "PASS"
+      },
+      {
+        "name": "反引号标识符",
+        "status": "PASS"
+      },
+      {
+        "name": "语句数量",
+        "status": "PASS"
+      }
+    ],
+    "issues": {
+      "semantic": [],
+      "formatting": [],
+      "warnings": [
+        {
+          "check": "归一化语义",
+          "detail": "去注释后文本存在差异（可能受注释内特殊字符影响）"
+        }
+      ]
+    },
+    "passed": true,
+    "summary": {
+      "totalChecks": 5,
+      "passedChecks": 5,
+      "failedChecks": 0,
+      "formattingIssues": 0,
+      "semanticIssues": 0,
+      "overall": "PASS"
+    }
+  }
+]

@@ -1,0 +1,12 @@
+database,schema,table_name,type,description
+east,public,acct_info,TABLE,账户信息表
+east,public,customer,TABLE,客户信息表
+east,public,loan_info,TABLE,贷款信息表
+east,public,deposit_info,TABLE,存款信息表
+east,public,trade_record,TABLE,交易流水表
+east,public,org_info,TABLE,机构信息表
+east,public,risk_mark,TABLE,风险标记表
+east,report,daily_rpt,VIEW,日报汇总视图
+east,report,monthly_rpt,VIEW,月报汇总视图
+east,staging,ods_acct,VIEW,ODS 账户接口表
+east,staging,ods_cust,VIEW,ODS 客户接口表
