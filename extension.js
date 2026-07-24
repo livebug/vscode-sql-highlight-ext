@@ -1,7 +1,9 @@
 const vscode = require('vscode');
 const { formatSQL } = require('./formatter');
-const { loadMetadata } = require('./metadata-loader');
+const { loadMetadata, loadTableIndex, loadTableColumns } = require('./metadata-loader');
 const logger = require('./logger');
+const { scanTables } = require('./table-scanner');
+const { DepsTreeProvider } = require('./deps-view-provider');
 
 /**
  * 激活扩展：注册 SQL 格式化器 + 语义高亮（表名/字段名）
@@ -307,6 +309,51 @@ function activate(context) {
     if (vscode.window.activeTextEditor) {
         updateBracketHighlight(vscode.window.activeTextEditor);
     }
+
+    // ========== 3.5 侧面板表依赖视图 ==========
+    logger.info('[依赖视图] 注册侧面板树视图...');
+    const depsProvider = new DepsTreeProvider();
+    context.subscriptions.push(
+        vscode.window.registerTreeDataProvider('sqlTableDeps', depsProvider)
+    );
+
+    // 编辑器变化时自动刷新依赖视图
+    function refreshDepsView() {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { depsProvider.clear(); return; }
+        const langId = editor.document.languageId;
+        if (langId !== 'sql-tdh' && langId !== 'sql-gaussdb') { depsProvider.clear(); return; }
+
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+        if (!workspaceFolder) { depsProvider.clear(); return; }
+
+        const text = editor.document.getText();
+        const scanResult = scanTables(text);
+        depsProvider.refresh(scanResult, workspaceFolder.uri.fsPath, function(tableKey) {
+            // 优先查临时表
+            if (scanResult.temp.has(tableKey)) {
+                const def = scanResult.temp.get(tableKey);
+                return def.columns && def.columns.length > 0 ? def.columns : null;
+            }
+            // 再查物理表元数据
+            const cols = loadTableColumns(workspaceFolder.uri.fsPath, tableKey);
+            return cols || null;
+        });
+    }
+
+    // 文档变化时刷新
+    const changeTimeout = { id: null };
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument(e => {
+            if (changeTimeout.id) clearTimeout(changeTimeout.id);
+            changeTimeout.id = setTimeout(refreshDepsView, 500);
+        })
+    );
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(refreshDepsView)
+    );
+    // 初次激活时刷新
+    setTimeout(refreshDepsView, 1000);
 
     // ========== 4. Hover + Definition: 表别名 & 临时表跳转 ==========
     languages.forEach(lang => {

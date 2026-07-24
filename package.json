@@ -1,138 +1,151 @@
 {
-  "name": "sql-dialect-highlight",
-  "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
-  "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
-  "version": "0.8.0",
-  "publisher": "sql-dialect-publisher",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/livebug/vscode-sql-highlight-ext.git"
-  },
-  "engines": {
-    "vscode": "^1.70.0"
-  },
-  "categories": [
-    "Programming Languages"
-  ],
-  "main": "./extension.js",
-  "activationEvents": [
-    "onLanguage:sql-tdh",
-    "onLanguage:sql-gaussdb"
-  ],
-  "contributes": {
-    "languages": [
-      {
-        "id": "sql-tdh",
-        "aliases": [
-          "SQL (TDH)",
-          "tdh-sql",
-          "Transwarp SQL"
-        ],
-        "extensions": [
-          ".tdhsql",
-          ".tdh.sql"
-        ],
-        "configuration": "./language-configuration.json"
-      },
-      {
-        "id": "sql-gaussdb",
-        "aliases": [
-          "SQL (GaussDB)",
-          "gaussdb-sql",
-          "GaussDB SQL"
-        ],
-        "extensions": [
-          ".gaussql",
-          ".gauss.sql"
-        ],
-        "configuration": "./language-configuration.json"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "sql-tdh",
-        "scopeName": "source.sql.tdh",
-        "path": "./syntaxes/sql-tdh.tmLanguage.json"
-      },
-      {
-        "language": "sql-gaussdb",
-        "scopeName": "source.sql.gaussdb",
-        "path": "./syntaxes/sql-gaussdb.tmLanguage.json"
-      }
-    ],
-    "configurationDefaults": {
-      "[sql-tdh]": {
-        "editor.bracketPairColorization.enabled": true,
-        "editor.guides.bracketPairs": true
-      },
-      "[sql-gaussdb]": {
-        "editor.bracketPairColorization.enabled": true,
-        "editor.guides.bracketPairs": true
-      }
+    "name": "sql-dialect-highlight",
+    "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
+    "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
+    "version": "0.8.0",
+    "publisher": "sql-dialect-publisher",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/livebug/vscode-sql-highlight-ext.git"
     },
-    "configuration": {
-      "title": "SQL Dialect Highlight",
-      "properties": {
-        "sqlDialectHighlight.format.indentSize": {
-          "type": "number",
-          "default": 4,
-          "description": "缩进空格数"
+    "engines": {
+        "vscode": "^1.70.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:sql-tdh",
+        "onLanguage:sql-gaussdb"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "sql-tdh",
+                "aliases": [
+                    "SQL (TDH)",
+                    "tdh-sql",
+                    "Transwarp SQL"
+                ],
+                "extensions": [
+                    ".tdhsql",
+                    ".tdh.sql"
+                ],
+                "configuration": "./language-configuration.json"
+            },
+            {
+                "id": "sql-gaussdb",
+                "aliases": [
+                    "SQL (GaussDB)",
+                    "gaussdb-sql",
+                    "GaussDB SQL"
+                ],
+                "extensions": [
+                    ".gaussql",
+                    ".gauss.sql"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "sql-tdh",
+                "scopeName": "source.sql.tdh",
+                "path": "./syntaxes/sql-tdh.tmLanguage.json"
+            },
+            {
+                "language": "sql-gaussdb",
+                "scopeName": "source.sql.gaussdb",
+                "path": "./syntaxes/sql-gaussdb.tmLanguage.json"
+            }
+        ],
+        "configurationDefaults": {
+            "[sql-tdh]": {
+                "editor.bracketPairColorization.enabled": true,
+                "editor.guides.bracketPairs": true
+            },
+            "[sql-gaussdb]": {
+                "editor.bracketPairColorization.enabled": true,
+                "editor.guides.bracketPairs": true
+            }
         },
-        "sqlDialectHighlight.format.maxWidth": {
-          "type": "number",
-          "default": 200,
-          "description": "单行最大字符数"
+        "configuration": {
+            "title": "SQL Dialect Highlight",
+            "properties": {
+                "sqlDialectHighlight.format.indentSize": {
+                    "type": "number",
+                    "default": 4,
+                    "description": "缩进空格数"
+                },
+                "sqlDialectHighlight.format.maxWidth": {
+                    "type": "number",
+                    "default": 200,
+                    "description": "单行最大字符数"
+                },
+                "sqlDialectHighlight.format.commaFirst": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "逗号优先（逗号在行首）"
+                },
+                "sqlDialectHighlight.format.andAlign": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "AND 行首对齐（多条件时拆分）"
+                },
+                "sqlDialectHighlight.format.keywordCase": {
+                    "type": "string",
+                    "default": "upper",
+                    "enum": [
+                        "upper",
+                        "lower",
+                        "preserve"
+                    ],
+                    "description": "关键字大小写"
+                },
+                "sqlDialectHighlight.logLevel": {
+                    "type": "string",
+                    "default": "info",
+                    "enum": [
+                        "debug",
+                        "info",
+                        "warn",
+                        "error"
+                    ],
+                    "description": "日志级别（debug/info/warn/error）"
+                },
+                "sqlDialectHighlight.metadata.maxCacheSize": {
+                    "type": "number",
+                    "default": 100,
+                    "description": "元数据字段缓存最大表数（LRU 淘汰）"
+                }
+            }
         },
-        "sqlDialectHighlight.format.commaFirst": {
-          "type": "boolean",
-          "default": true,
-          "description": "逗号优先（逗号在行首）"
-        },
-        "sqlDialectHighlight.format.andAlign": {
-          "type": "boolean",
-          "default": true,
-          "description": "AND 行首对齐（多条件时拆分）"
-        },
-        "sqlDialectHighlight.format.keywordCase": {
-          "type": "string",
-          "default": "upper",
-          "enum": [
-            "upper",
-            "lower",
-            "preserve"
-          ],
-          "description": "关键字大小写"
-        },
-        "sqlDialectHighlight.logLevel": {
-          "type": "string",
-          "default": "info",
-          "enum": [
-            "debug",
-            "info",
-            "warn",
-            "error"
-          ],
-          "description": "日志级别（debug/info/warn/error）"
+        "views": {
+            "explorer": [
+                {
+                    "id": "sqlTableDeps",
+                    "name": "SQL 表依赖"
+                }
+            ]
         }
-      }
+    },
+    "commands": [
+        {
+            "command": "sqlDialectHighlight.showLog",
+            "title": "SQL Dialect Highlight: 显示日志"
+        }
+    ],
+    "scripts": {
+        "package": "vsce package",
+        "test": "node test/agent.js --ci",
+        "test:verbose": "node test/agent.js --verbose",
+        "test:dir": "node test/agent.js --dir",
+        "test:format": "node test/agent.js --format-only"
+    },
+    "dependencies": {
+        "sql-formatter": "^14.0.0",
+        "vkbeautify": "^0.99.3"
     }
-  },
-  "commands": [
-    {
-      "command": "sqlDialectHighlight.showLog",
-      "title": "SQL Dialect Highlight: 显示日志"
-    }
-  ],
-  "scripts": {
-    "package": "vsce package",
-    "test": "node test/agent.js --ci",
-    "test:verbose": "node test/agent.js --verbose",
-    "test:dir": "node test/agent.js --dir",
-    "test:format": "node test/agent.js --format-only"
-  },
-  "dependencies": {
-    "sql-formatter": "^14.0.0",
-    "vkbeautify": "^0.99.3"
-  }
 }
