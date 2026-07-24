@@ -59,7 +59,7 @@ function scanTables(text) {
     const deps = [];              // 依赖关系
 
     // ------ 1. 找 CREATE TABLE / CREATE TEMP TABLE ------
-    const createRe = /\bCREATE\s+(?:TEMPORARY|TEMP|LOCAL\s+TEMPORARY|GLOBAL\s+TEMPORARY)?\s*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\b/gi;
+    const createRe = /\bCREATE\s+(?:TEMPORARY|TEMP|LOCAL\s+TEMPORARY|GLOBAL\s+TEMPORARY)?\s*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)(?=[\s\(\);,\|]|$)/gi;
     let m;
     while ((m = createRe.exec(clean)) !== null) {
         const tableName = m[1];
@@ -82,7 +82,7 @@ function scanTables(text) {
         // 解析字段
         let columns = [];
         // 模式A: CREATE TABLE (...) — 显式列定义
-        const colDefMatch = createBlock.match(/\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+([a-zA-Z][a-zA-Z0-9_() ,]*?)(?:\s+(?:NOT\s+)?NULL|DEFAULT|PRIMARY|REFERENCES|,|\))/i);
+        const colDefMatch = createBlock.match(/\(\s*([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)\s+([a-zA-Z\u4e00-\u9fa5][a-zA-Z0-9_() ,\u4e00-\u9fa5]*?)(?:\s+(?:NOT\s+)?NULL|DEFAULT|PRIMARY|REFERENCES|,|\))/i);
         // 模式B: CREATE TABLE AS SELECT — 从 SELECT 推断
         const asSelectMatch = createBlock.match(/\bAS\s+(SELECT|WITH)\b/i);
         if (asSelectMatch) {
@@ -157,7 +157,7 @@ function extractFromTables(text) {
     const clean = cleanText(text);
     const tables = [];
     const seen = new Set();
-    const re = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/gi;
+    const re = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)/gi;
     let m;
     while ((m = re.exec(clean)) !== null) {
         const name = m[1];
@@ -169,7 +169,7 @@ function extractFromTables(text) {
         }
     }
     // 也支持 FROM/JOIN 后面的子查询之后的别名
-    const aliasRe = /(?:FROM|JOIN|,)\s+(?:\([^)]*\)\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\s+(?:(?:AS)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/gi;
+    const aliasRe = /(?:FROM|JOIN|,)\s+(?:\([^)]*\)\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)\s+(?:(?:AS)\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)/gi;
     while ((m = aliasRe.exec(clean)) !== null) {
         const name = m[1];
         const alias = m[2];
@@ -182,7 +182,7 @@ function extractFromTables(text) {
         }
     }
     // 逗号分隔的多表: FROM table_a a, table_b b  或  FROM a, b, c
-    const commaRe = /,\s*([a-zA-Z_][a-zA-Z0-9_.]*)(?:\s+(?:[a-zA-Z_][a-zA-Z0-9_]*))?/gi;
+    const commaRe = /,\s*([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)(?:\s+(?:[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*))?/gi;
     while ((m = commaRe.exec(clean)) !== null) {
         const name = m[1];
         const key = name.toLowerCase();
@@ -192,7 +192,7 @@ function extractFromTables(text) {
         }
     }
     // 提取子查询后的别名: FROM (...) alias
-    const subAliasRe = /FROM\s*\([^)]*\)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi;
+    const subAliasRe = /FROM\s*\([^)]*\)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)/gi;
     while ((m = subAliasRe.exec(clean)) !== null) {
         const alias = m[1];
         const key = alias.toLowerCase();
@@ -219,7 +219,7 @@ function inferColumnsFromSelect(createBlock) {
         const trimmed = part.trim();
         if (!trimmed) continue;
         // 处理 "expr AS alias" 或 "expr alias" 或 "expr"
-        const asMatch = trimmed.match(/(?:\bAS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
+        const asMatch = trimmed.match(/(?:\bAS\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)\s*$/);
         if (asMatch) {
             const name = asMatch[1];
             if (!KEYWORDS.has(name.toUpperCase())) {
@@ -246,7 +246,7 @@ function extractColumnsFromDef(createBlock) {
         const trimmed = def.trim();
         if (!trimmed) continue;
         // pattern: col_name data_type [constraints]
-        const match = trimmed.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+([a-zA-Z][a-zA-Z0-9_() ,]*?)(?:\s+(?:NOT\s+)?NULL\b|DEFAULT\s+\S+|PRIMARY\s+KEY|REFERENCES|,|$)/i);
+        const match = trimmed.match(/^\s*([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)\s+([a-zA-Z\u4e00-\u9fa5][a-zA-Z0-9_() ,\u4e00-\u9fa5]*?)(?:\s+(?:NOT\s+)?NULL\b|DEFAULT\s+\S+|PRIMARY\s+KEY|REFERENCES|,|$)/i);
         if (match) {
             const name = match[1];
             let dataType = match[2].trim().replace(/\s+/g, ' ');
@@ -297,7 +297,7 @@ function parseAliasDefinitions(text) {
     clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
     clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
 
-    const tableAliasRe = /(?:FROM|JOIN|,)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+(?:(AS)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*(?:,|JOIN|ON|WHERE|GROUP|HAVING|ORDER|LIMIT|LEFT|RIGHT|INNER|CROSS|FULL|NATURAL|$))/gi;
+    const tableAliasRe = /(?:FROM|JOIN|,)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)\s+(?:(AS)\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)(?=\s*(?:,|JOIN|ON|WHERE|GROUP|HAVING|ORDER|LIMIT|LEFT|RIGHT|INNER|CROSS|FULL|NATURAL|$))/gi;
     let m;
     while ((m = tableAliasRe.exec(clean)) !== null) {
         const tableName = m[1];

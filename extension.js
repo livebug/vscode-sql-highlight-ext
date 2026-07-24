@@ -445,7 +445,7 @@ function parseAliasDefinitions(document) {
     // 匹配 FROM/JOIN table_name [[AS] alias] 和逗号分隔 table_name alias 模式
     // 模式1: FROM|JOIN table_name alias / FROM|JOIN table_name AS alias
     // 模式2: , table_name alias (逗号分隔的多表)
-    const tableAliasRe = /(?:FROM|JOIN|,)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+(?:(AS)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*(?:,|JOIN|ON|WHERE|GROUP|HAVING|ORDER|LIMIT|LEFT|RIGHT|INNER|CROSS|FULL|NATURAL|$))/gi;
+    const tableAliasRe = /(?:FROM|JOIN|,)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)\s+(?:(AS)\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)(?=\s*(?:,|JOIN|ON|WHERE|GROUP|HAVING|ORDER|LIMIT|LEFT|RIGHT|INNER|CROSS|FULL|NATURAL|$))/gi;
     let m;
     while ((m = tableAliasRe.exec(clean)) !== null) {
         const tableName = m[1];
@@ -481,7 +481,7 @@ function parseAliasDefinitions(document) {
  * Hover: 悬浮在表别名上 → 显示原表名
  */
 function provideAliasHover(document, position) {
-    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_]*/);
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
 
     const word = document.getText(wordRange);
@@ -515,7 +515,7 @@ function provideAliasHover(document, position) {
  * Definition: F12 / Ctrl+Click 跳转到别名定义处
  */
 function provideAliasDefinition(document, position) {
-    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_]*/);
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
 
     const word = document.getText(wordRange);
@@ -552,7 +552,7 @@ function parseCreateTableDefs(document) {
     clean = clean.replace(/--[^\n]*/g, m => ' '.repeat(m.length));
     clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
 
-    const re = /\bCREATE\s+(?:TEMPORARY|TEMP|LOCAL\s+TEMPORARY|GLOBAL\s+TEMPORARY)?\s*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\b/gi;
+    const re = /\bCREATE\s+(?:TEMPORARY|TEMP|LOCAL\s+TEMPORARY|GLOBAL\s+TEMPORARY)?\s*TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)(?=[\s\(\);,\|]|$)/gi;
     let m;
     while ((m = re.exec(clean)) !== null) {
         const tableName = m[1];
@@ -593,7 +593,7 @@ function parseCreateTableDefs(document) {
  * Hover: 悬浮在表名上 → 如果是 CREATE TABLE 定义的，显示定义摘要
  */
 function provideTableHover(document, position) {
-    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_.]*/);
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
     const word = document.getText(wordRange);
 
@@ -620,7 +620,7 @@ function provideTableHover(document, position) {
  * Definition: F12 / Ctrl+Click 跳转到 CREATE TABLE 定义
  */
 function provideTableDefinition(document, position) {
-    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_][a-zA-Z0-9_.]*/);
+    const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
     const word = document.getText(wordRange);
 
@@ -668,7 +668,7 @@ function doProvideCompletionItems(document, position) {
         || /\b(FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+[^,\s]+\s*$/i.test(textBeforeCursor)
         || /,\s*$/i.test(textBeforeCursor) && /\b(FROM|JOIN)\b/i.test(upperBefore);
 
-    const dotMatch = textBeforeCursor.match(/([a-zA-Z_][a-zA-Z0-9_]*)\.\s*$/);
+    const dotMatch = textBeforeCursor.match(/([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)\.\s*$/);
 
     if (dotMatch) {
         // 表别名. 之后 → 补全该表的字段
@@ -769,7 +769,7 @@ function provideSemanticTokens(document, legend) {
         const cleanUpper = upper.replace(/\$\{[^}]*\}(?:\.)?/g, m => ' '.repeat(m.length));
 
         // (A) FROM / JOIN / INTO / UPDATE / TABLE / TRUNCATE / DESCRIBE 后的标识符 → 表名 (class)
-        const tableContextRegex = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/gi;
+        const tableContextRegex = /(?:FROM|JOIN|INTO|UPDATE|TABLE|TRUNCATE|DESCRIBE|DESC)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)/gi;
         let m;
         while ((m = tableContextRegex.exec(cleanUpper)) !== null) {
             const word = m[1];
@@ -782,7 +782,7 @@ function provideSemanticTokens(document, legend) {
         }
 
         // (B) 表别名声明（表名后有空格+短标识符，非关键字）→ variable.declaration
-        const aliasDeclRegex = /\b([a-zA-Z_][a-zA-Z0-9_.]*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+        const aliasDeclRegex = /\b([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)(?=[\s\(\);,\|]|$)/g;
         while ((m = aliasDeclRegex.exec(cleanUpper)) !== null) {
             const alias = m[2];
             if (keywords.has(alias.toUpperCase())) continue;
@@ -795,7 +795,7 @@ function provideSemanticTokens(document, legend) {
         }
 
         // (C) AS 别名 → variable.declaration
-        const asAliasRegex = /\bAS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gi;
+        const asAliasRegex = /\bAS\s+([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)(?=[\s\(\);,\|]|$)/gi;
         while ((m = asAliasRegex.exec(upper)) !== null) {
             const alias = m[1];
             if (keywords.has(alias.toUpperCase())) continue;
@@ -806,7 +806,7 @@ function provideSemanticTokens(document, legend) {
         }
 
         // (D) 表名.字段名 → property (字段部分高亮)
-        const dotFieldRegex = /\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+        const dotFieldRegex = /\.([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)/g;
         while ((m = dotFieldRegex.exec(trimmed)) !== null) {
             const field = m[1];
             if (keywords.has(field.toUpperCase())) continue;
@@ -837,7 +837,7 @@ function provideSQLDocumentSymbols(document) {
     clean = clean.replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length));
 
     // ------ 1. CREATE TABLE / VIEW / TEMP TABLE ------
-    const createRe = /\bCREATE\s+(?:(?:LOCAL\s+|GLOBAL\s+)?(?:TEMPORARY|TEMP)\s+)?(TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\b/gi;
+    const createRe = /\bCREATE\s+(?:(?:LOCAL\s+|GLOBAL\s+)?(?:TEMPORARY|TEMP)\s+)?(TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*)(?=[\s\(\);,\|]|$)/gi;
     let m;
     while ((m = createRe.exec(clean)) !== null) {
         const objType = m[1].toUpperCase();
@@ -864,7 +864,7 @@ function provideSQLDocumentSymbols(document) {
 
     // ------ 2. WITH CTE 子句 ------
     // 匹配: WITH cte_name AS ( 或 , cte_name AS (
-    const cteRe = /(?:^|\bWITH\b|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+AS\s*\(/gi;
+    const cteRe = /(?:^|\bWITH\b|,)\s*([a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*)\s+AS\s*\(/gi;
     while ((m = cteRe.exec(clean)) !== null) {
         const cteName = m[1];
         const startPos = document.positionAt(m.index);
