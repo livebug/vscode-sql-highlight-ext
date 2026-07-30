@@ -15,7 +15,7 @@
     "categories": [
         "Programming Languages"
     ],
-    "main": "./extension.js",
+    "main": "./src/extension.js",
     "activationEvents": [
         "onLanguage:sql-tdh",
         "onLanguage:sql-gaussdb"

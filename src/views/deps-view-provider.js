@@ -10,7 +10,7 @@
 'use strict';
 
 const vscode = require('vscode');
-const logger = require('./logger');
+const logger = require('../logger');
 
 /**
  * 树节点

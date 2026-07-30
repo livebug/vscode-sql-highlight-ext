@@ -10,7 +10,7 @@
  */
 'use strict';
 
-const logger = require('./logger');
+const logger = require('../logger');
 
 // ---- 关键字集合（用于过滤别名） ----
 const KEYWORDS = new Set([
