@@ -33,14 +33,29 @@
 ```
 .
 ├── package.json                        # 扩展清单（语言注册、配置项、命令）
-├── extension.js                        # 扩展入口（格式化/语义/补全/悬停/跳转）
-├── formatter.js                        # SQL 格式化引擎
-├── metadata-loader.js                  # .metadata CSV 数据字典加载器
-├── logger.js                           # 统一日志输出模块
 ├── language-configuration.json         # 语言配置（注释、括号匹配）
 ├── syntaxes/
 │   ├── sql-tdh.tmLanguage.json         # TDH 语法高亮定义
 │   └── sql-gaussdb.tmLanguage.json     # GaussDB 语法高亮定义
+├── src/
+│   ├── extension.js                    # 扩展入口（注册所有 provider）
+│   ├── logger.js                       # 统一日志输出模块
+│   ├── core/
+│   │   ├── formatter.js                # SQL 格式化引擎
+│   │   ├── alias-parser.js             # 别名解析 & CREATE TABLE 定义解析
+│   │   ├── metadata-loader.js          # .metadata CSV 数据字典加载器
+│   │   ├── table-scanner.js            # 表引用扫描器
+│   │   └── completion-data.js          # 静态补全数据（关键字/函数/类型/Snippet）
+│   ├── providers/
+│   │   ├── format-provider.js          # 文档格式化 & 选区格式化
+│   │   ├── semantic-tokens.js          # 语义高亮（表名/字段名/别名）
+│   │   ├── bracket-highlight.js        # CASE↔END, BEGIN↔END, WHEN↔THEN 配对
+│   │   ├── hover-provider.js           # 悬浮提示（别名 + 表定义）
+│   │   ├── definition-provider.js      # 定义跳转（别名 + CREATE TABLE）
+│   │   ├── completion-provider.js      # 代码补全（关键字/函数/元数据/snippet）
+│   │   └── document-symbols.js         # 文档大纲 & 面包屑导航
+│   └── views/
+│       └── deps-view-provider.js       # 侧面板表依赖树视图
 ├── test/
 │   ├── agent.js                        # 测试运行器
 │   ├── semantic_diff.js                # 语义差异测试

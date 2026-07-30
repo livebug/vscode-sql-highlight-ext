@@ -188,7 +188,7 @@ class TestRunner {
     loadFormatter() {
         // 尝试从多个路径加载
         const paths = [
-            path.join(__dirname, '..', 'formatter.js'),
+            path.join(__dirname, '..', 'src', 'core', 'formatter.js'),
         ];
         for (const p of paths) {
             if (fs.existsSync(p)) {
