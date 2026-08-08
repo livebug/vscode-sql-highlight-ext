@@ -126,6 +126,7 @@ const SCENARIOS = [
     { id: 'E06', cat: '边界', name: 'AS 在表达式内（CAST AS STRING）', sql: "SELECT CAST(DATE(x, 'YYYY-MM-DD') AS STRING) AS a, y AS bb FROM t;" },
     { id: 'E07', cat: '边界', name: '含子查询字段 AS（不参与对齐）', sql: "SELECT nvl((SELECT max(v) FROM t2 WHERE t2.id = t.id), 0) AS a, b AS bb FROM t;" },
     { id: 'E08', cat: '边界', name: '行注释含字符串/变量', sql: "SELECT 1; SELECT a -- 注释 'xyz' ${V_OG}\nFROM t;" },
+    { id: 'E09', cat: '边界', name: '嵌套 nvl 长子查询字段缩进', sql: "SELECT id, nvl((SELECT cfg.item_value FROM mod.SS_CONFIG cfg WHERE cfg.p_og='${V_OG}' AND cfg.item_id='ISNT_NAME' AND a.p_og=cfg.p_og LIMIT 1), 'XXXXXXXXXXXX') AS ISSUE_NAME FROM ods.c_PDPDTPDT_sp a;" },
 ];
 
 // ======================== 校验工具 ========================

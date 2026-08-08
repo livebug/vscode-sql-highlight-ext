@@ -179,7 +179,7 @@ function formatSegment(seg, opts) {
     const CI = ' '.repeat(opts.indentSize);
     switch (kw) {
         case 'SELECT': return formatCommaList('SELECT', content, opts);
-        case 'FROM': return 'FROM '+formatSubqueryContent(content, opts);
+        case 'FROM': return 'FROM '+formatSubqueryContent(content, opts, 5);
         case 'WHERE': case 'HAVING': return formatAndList(kw, content, CI, opts);
         case 'ON': {
             // ON/AND 右对齐到前一个 JOIN 关键字的末尾列
@@ -190,14 +190,14 @@ function formatSegment(seg, opts) {
         }
         case 'GROUP BY': case 'ORDER BY': return formatCommaList(kw, content, opts);
         case 'LIMIT': case 'OFFSET': return kw+' '+content;
-        case 'UPDATE': return 'UPDATE '+formatSubqueryContent(content, opts);
+        case 'UPDATE': return 'UPDATE '+formatSubqueryContent(content, opts, 7);
         case 'SET': {
             // UPDATE 的 SET：赋值列表逗号优先逐行，不与 UPDATE 合并
             const items = splitComma(content).map(s=>s.trim()).filter(Boolean);
             if (items.length <= 1) return 'SET '+items[0];
-            const lines = ['SET '+formatSubqueryContent(items[0], opts)];
+            const lines = ['SET '+formatSubqueryContent(items[0], opts, 4)];
             const pad = ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
-            for (let i=1; i<items.length; i++) lines.push(pad+formatSubqueryContent(items[i], opts));
+            for (let i=1; i<items.length; i++) lines.push(pad+formatSubqueryContent(items[i], opts, pad.length));
             return lines.join('\n');
         }
         case 'CREATE': return formatCreate(content, opts);
@@ -207,8 +207,8 @@ function formatSegment(seg, opts) {
             if (kw.includes('JOIN')) {
                 lastJoinEndCol = CI.length + kw.length;  // 记录 JOIN 结束列，供 ON 对齐
                 const m = content.match(/^(.*?)\bON\b(.+)$/i);
-                if (m) return CI+kw+' '+formatSubqueryContent(m[1].trim(),opts)+'\n'+formatAndList(CI+'ON', m[2].trim(), CI+'  ', opts);
-                return CI+kw+' '+formatSubqueryContent(content, opts);
+                if (m) return CI+kw+' '+formatSubqueryContent(m[1].trim(),opts, CI.length+kw.length+1)+'\n'+formatAndList(CI+'ON', m[2].trim(), CI+'  ', opts);
+                return CI+kw+' '+formatSubqueryContent(content, opts, CI.length+kw.length+1);
             }
             return kw+' '+content;
     }
@@ -272,18 +272,17 @@ function formatCommaList(kw, content, opts) {
             lines.push(item);
             firstField = true; // 注释后下一个字段用一级缩进
         } else {
-            // 递归展开字段中的子查询
-            const formatted = formatSubqueryContent(item, opts);
+            // 递归展开字段中的子查询（base=该字段的起始列）
             if (opts.commaFirst) {
                 const prefix = firstField ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
-                lines.push(prefix + formatted);
+                lines.push(prefix + formatSubqueryContent(item, opts, prefix.length));
             } else {
                 // 逗号在行尾：给上一行末尾补逗号（字段行之间）
                 if (!firstField) {
                     const lastIdx = lines.length - 1;
                     if (!/,\s*$/.test(lines[lastIdx])) lines[lastIdx] += ',';
                 }
-                lines.push(INDENT + formatted);
+                lines.push(INDENT + formatSubqueryContent(item, opts, INDENT.length));
             }
             firstField = false;
         }
@@ -355,17 +354,18 @@ function alignSelectFields(items, opts) {
 function formatAndList(kw, content, andIndent, opts) {
     // andAlign=false: 不强制将 AND/OR 条件拆成多行，保持内联
     if (!opts.andAlign) {
-        return kw + ' ' + formatSubqueryContent(content, opts);
+        return kw + ' ' + formatSubqueryContent(content, opts, kw.length + 1);
     }
     const parts = splitAndOrWithOps(content);
-    if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts);
+    if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts, kw.length + 1);
     // 短行捷径：仅当内容本身就短（≤30）且无换行时合并单行
     if (parts.length===2 && !content.includes('\n') && (kw+' '+content).length<=30) {
-        return kw + ' ' + formatSubqueryContent(content, opts);
+        return kw + ' ' + formatSubqueryContent(content, opts, kw.length + 1);
     }
     const lines = [];
     for (let i=0; i<parts.length; i++) {
-        const partFormatted = formatSubqueryContent(parts[i].text, opts);
+        const partBase = i===0 ? (kw.length + 1) : (andIndent.length + parts[i].op.length + 1);
+        const partFormatted = formatSubqueryContent(parts[i].text, opts, partBase);
         lines.push(i===0 ? (kw+' '+partFormatted) : (andIndent+parts[i].op+' '+partFormatted));
     }
     return lines.join('\n');
@@ -471,7 +471,8 @@ function formatCreate(content, opts) {
             const colItems = reattachComments(splitComma(cols).map(s => s.trim()).filter(Boolean));
             const commaPad = ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
             colItems.forEach((c, i) => {
-                lines.push((i === 0 ? IND : commaPad) + formatSubqueryContent(c, opts));
+                const pad = i === 0 ? IND : commaPad;
+                lines.push(pad + formatSubqueryContent(c, opts, pad.length));
             });
             lines.push(')');
             if (tail) for (const clause of splitStorageClauses(tail)) lines.push(clause);
@@ -498,7 +499,7 @@ function formatCteItem(cte, opts, baseIndent) {
     const prefix = rec + name + coldefs + ' AS ';
     let block;
     if (query.startsWith('(')) {
-        block = formatSubqueryContent(query, opts);
+        block = formatSubqueryContent(query, opts, prefix.length);
     } else {
         // 裸 SELECT（WITH ... AS SELECT ...）
         block = '(\n' + indentBlock(formatTop(query, opts), IND) + '\n)';
@@ -553,9 +554,11 @@ function formatWith(content, opts) {
 }
 
 // ======================== 子查询递归 ========================
-function formatSubqueryContent(content, opts) {
+// base 为当前内容在最终行中的起始列；子查询块缩进相对 `(` 所在真实列（base+oi），
+// 避免嵌套（如 nvl((SELECT...))）时内部行与 `)` 落在错误列
+function formatSubqueryContent(content, opts, base) {
+    base = base || 0;
     let r='', i=0;
-    const INDENT = ' '.repeat(opts.indentSize);
     while (i < content.length) {
         const oi = content.indexOf('(', i);
         if (oi===-1) { r+=content.slice(i); break; }
@@ -566,9 +569,10 @@ function formatSubqueryContent(content, opts) {
         const inner = content.slice(oi+1, j);
         if (/^\s*(SELECT|WITH)\b/i.test(inner)) {
             const formatted = formatTop(inner, opts);
-            r += '(\n' + formatted.split('\n').map(l => INDENT + l).join('\n') + '\n)';
+            const subIndent = ' '.repeat(base + oi + opts.indentSize);
+            r += '(\n' + formatted.split('\n').map(l => subIndent + l).join('\n') + '\n' + ' '.repeat(base + oi) + ')';
         } else {
-            r += '(' + formatInParenContent(inner, opts) + ')';
+            r += '(' + formatInParenContent(inner, opts, base + oi + 1) + ')';
         }
         i = j+1;
     }
@@ -578,10 +582,10 @@ function formatSubqueryContent(content, opts) {
 /**
  * 对括号内的非子查询内容递归展开子查询（用于 WHERE/SELECT/HAVING 中）
  */
-function formatInParenContent(content, opts) {
+function formatInParenContent(content, opts, base) {
+    base = base || 0;
     // 递归处理内容中可能出现的内嵌子查询
     let r = '', i = 0;
-    const INDENT = ' '.repeat(opts.indentSize);
     while (i < content.length) {
         const oi = content.indexOf('(', i);
         if (oi === -1) { r += content.slice(i); break; }
@@ -595,9 +599,10 @@ function formatInParenContent(content, opts) {
         const inner = content.slice(oi + 1, j);
         if (/^\s*(SELECT|WITH)\b/i.test(inner)) {
             const formatted = formatTop(inner, opts);
-            r += '(\n' + formatted.split('\n').map(l => INDENT + l).join('\n') + '\n)';
+            const subIndent = ' '.repeat(base + oi + opts.indentSize);
+            r += '(\n' + formatted.split('\n').map(l => subIndent + l).join('\n') + '\n' + ' '.repeat(base + oi) + ')';
         } else {
-            r += '(' + formatInParenContent(inner, opts) + ')';
+            r += '(' + formatInParenContent(inner, opts, base + oi + 1) + ')';
         }
         i = j + 1;
     }
@@ -732,10 +737,12 @@ function formatCaseBlock(caseText, opts) {
     }
 
     // 4) 多行：先对 cond/val 做子查询展开（__L 由 expandBlockLine 统一恢复）
-    const sub = (s) => s ? formatSubqueryContent(s, opts) : s;
+    // base 相对 case 块起始列：cond/else 内联在 'WHEN '/'ELSE ' 后（IND+5）；
+    // val 走 indentBlock 统一移位（每行 +IND+IND），故 base=0 交由 indentBlock 处理
+    const sub = (s, b) => s ? formatSubqueryContent(s, opts, b || 0) : s;
     const branchInfos = branches.map(b => {
-        const cond = sub(b.cond);
-        const val = sub(b.val);
+        const cond = sub(b.cond, IND.length + 5);
+        const val = sub(b.val, 0);
         const multiCond = splitAndOr(cond).length > 1;
         const single = 'WHEN ' + cond + ' THEN ' + val;
         const singleOK = !multiCond && single.length <= 120 && !val.includes('\n') && !cond.includes('\n');
@@ -786,7 +793,7 @@ function formatCaseBlock(caseText, opts) {
         }
     }
     if (elseVal !== null) {
-        lines.push(IND + 'ELSE ' + sub(elseVal || 'NULL'));
+        lines.push(IND + 'ELSE ' + sub(elseVal || 'NULL', IND.length + 5));
     }
     lines.push('END');
 

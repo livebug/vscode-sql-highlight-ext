@@ -6,6 +6,14 @@
 
 ## 版本历史
 
+### v0.9.4 (未发布)
+- **fix: 子查询块缩进改为相对 `(` 所在列** — 修复嵌套字段（如 `nvl((SELECT ... LIMIT 1), 'xxx') AS ISSUE_NAME`）展开为多行时，子查询内部行与 `)` 落在错误列（固定 4 空格、`)` 在列 0）的问题：
+  - `formatSubqueryContent`/`formatInParenContent` 新增 `base`（内容起始列）参数，子查询块缩进 = `base + '('偏移 + indentSize`，`)` 对齐 `(`
+  - 所有调用点（SELECT 字段/WHERE/ON/JOIN/SET/CREATE 列/CTE）传入各自真实起始列
+  - CASE 分支内子查询：cond/ELSE 值相对 `WHEN `/`ELSE `（IND+5）展开，THEN 值由 indentBlock 统一移位
+  - 效果：`(` 与 `)` 对齐、内部 SELECT/WHERE/AND 逐级嵌套
+- 测试：场景测试扩至 77 个（新增 E09 嵌套 nvl 长子查询字段缩进回归），76→77 全绿；npm test 3 文件 5/5 PASS；真实 test.sql 幂等稳定
+
 ### v0.9.3 (2026-08)
 - **fix: 真实生产 SQL 全面校验修复** — 用真实大 SQL（`testdata/sql/test.sql`，8 条语句、13 个 CASE、多段注释/子查询）做端到端验证，修复 4 类内容丢失/幂等 bug：
   - **restore()/postProcess() 改为迭代式恢复**（fixpoint）：解决块注释内嵌行注释、注释内嵌字符串/变量导致的占位符泄漏（`__S/__C/__O` 泄漏）
