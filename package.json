@@ -142,6 +142,7 @@
         "test": "node test/agent.js --dir --ci testdata/sql",
         "test:verbose": "node test/agent.js --dir --verbose testdata/sql",
         "test:dir": "node test/agent.js --dir testdata/sql",
-        "test:format": "node test/agent.js --format-only testdata/sql/semantic-test.sql"
+        "test:format": "node test/agent.js --format-only testdata/sql/semantic-test.sql",
+        "test:scenarios": "node test/scenarios.js"
     }
 }

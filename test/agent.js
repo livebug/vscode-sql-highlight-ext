@@ -55,9 +55,11 @@ class SemanticAnalyzer {
     /** 提取关键字计数 */
     countKeywords(text) {
         const counts = {};
+        // 语义检查忽略注释文本（避免注释中的 AND/OR 等被误计）
+        const cleaned = text.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
         const re = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
         let m;
-        while ((m = re.exec(text)) !== null) {
+        while ((m = re.exec(cleaned)) !== null) {
             const w = m[0].toUpperCase();
             if (this.keywords_.has(w)) counts[w] = (counts[w] || 0) + 1;
         }

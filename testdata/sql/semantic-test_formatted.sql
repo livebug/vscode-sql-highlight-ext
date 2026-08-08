@@ -6,9 +6,10 @@
 CREATE TEMP TABLE tmp_order_summary AS
 SELECT
     user_id
-  , COUNT(*) AS order_cnt
+  , COUNT(*)          AS order_cnt
   , SUM(total_amount) AS total_amt
-FROM orders WHERE created_at >= CURRENT_DATE - 30 GROUP BY user_id;
+FROM orders WHERE created_at >= CURRENT_DATE - 30
+GROUP BY user_id;
 
 -- 2. 别名定义 + 使用
 SELECT
@@ -48,6 +49,7 @@ FROM orders o;
 
 -- 5. CASE WHEN 内多条件 AND/OR 对齐
 SELECT CASE
+           -- ⚠ 混合 AND/OR，建议用括号明确优先级
            WHEN o.total_amount > 10000
            AND o.status = 'PAID'
            OR o.express = 1

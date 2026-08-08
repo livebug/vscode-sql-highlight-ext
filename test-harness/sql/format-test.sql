@@ -68,3 +68,31 @@ FROM customer;
 -- 测试10: INSERT INTO ... SELECT
 INSERT INTO ${V_DB}.tmp_result (cust_id, cnt)
 SELECT cust_id, COUNT(*) FROM trade_record GROUP BY cust_id;
+
+-- 测试11: SELECT 字段 AS 对齐 + 注释对齐
+-- 格式化后 AS 关键字列对齐，尾部注释列对齐
+SELECT total_amount * 0.8 AS discount, CONCAT(cust_name, '-', cert_no) AS full_id, balance AS bal FROM customer;
+
+-- 测试12: GROUP BY / ORDER BY 各自独立成行
+SELECT cust_id, COUNT(*) AS cnt, SUM(amount) AS total FROM trade GROUP BY cust_id ORDER BY total DESC;
+
+-- 测试13: UPDATE SET 逐行 / DELETE 短则单行
+UPDATE customer SET status = 'INACTIVE', risk_level = 'LOW', balance = 0 WHERE cust_id = 'C002';
+DELETE FROM customer WHERE status = 'INACTIVE';
+
+-- 测试14: CREATE TABLE 强制多行 + 存储子句换行
+CREATE TABLE acct_info (acct_id VARCHAR(32) PRIMARY KEY, cust_id VARCHAR(32) NOT NULL, balance DECIMAL(18,2) DEFAULT 0) CLUSTERED BY (acct_id) SORTED BY (acct_id) INTO 16 BUCKETS STORED AS PARQUET;
+
+-- 测试15: WITH 多 CTE 逐行 + 内层 SELECT 格式化
+WITH a AS (SELECT id, name FROM t1 WHERE x > 1), b AS (SELECT id FROM t2 WHERE y < 2) SELECT a.id FROM a JOIN b ON a.id = b.id;
+
+-- 测试16: WHEN 多条件 AND/OR 换行 + 优先级告警
+SELECT CASE WHEN balance > 10000 AND acct_type = 'SAVING' OR cust_level = 'VIP' THEN 'HIGH' WHEN balance > 1000 THEN 'MEDIUM' ELSE 'LOW' END AS level FROM acct_info;
+
+-- 测试17: 字段后行注释（注释留在字段行尾，逗号保留）
+SELECT cust_id, -- 客户编号
+ cust_name, -- 客户名称
+ risk_level FROM customer;
+
+-- 测试18: MERGE（WHEN 独立成行，SET 动作缩进不与 WHEN 同行）
+MERGE INTO target t USING source s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.name = s.name WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name);

@@ -72,7 +72,8 @@ FROM ods_users u
     SELECT
         user_id
       , COUNT(*) AS cnt
-    FROM ods_order_header WHERE dt = '2026-01-01' GROUP BY user_id
+    FROM ods_order_header WHERE dt = '2026-01-01'
+    GROUP BY user_id
 ) o
            ON u.id = o.user_id;
 

@@ -61,6 +61,8 @@ function protectCase(sql) {
         const m = sql.slice(i).match(/\bCASE\b/);
         if (!m) { r += sql.slice(i); break; }
         const caseStart = i + m.index;
+        // 限定标识符（如 t.case）不是 CASE 关键字，跳过
+        if (sql[caseStart - 1] === '.') { r += sql.slice(i, caseStart + 4); i = caseStart + 4; continue; }
         // 深度配对找匹配的 END（忽略括号，嵌套 CASE 整体包含）
         let caseDepth = 1, j = caseStart + 4, endPos = -1;
         while (j < sql.length) {
@@ -68,6 +70,8 @@ function protectCase(sql) {
             if (!e) break;
             const kw = e[0].toUpperCase();
             const idx = j + e.index;
+            // t.CASE / t.END 之类的限定标识符，不参与配对
+            if (sql[idx - 1] === '.') { j = idx + kw.length; continue; }
             if (kw === 'CASE') caseDepth++;
             else { caseDepth--; if (caseDepth === 0) { endPos = idx; break; } }
             j = idx + kw.length;
@@ -95,7 +99,7 @@ function uppercase(sql) {
 let lastJoinEndCol = 0;  // 上一个 JOIN 关键字结束列号（用于 ON/AND 右对齐）
 
 // ======================== 从句拆分 ========================
-const MAIN_RE = /\b(SELECT|FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+OUTER\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|NATURAL\s+JOIN|JOIN|ON|UNION|UNION\s+ALL|INTERSECT|EXCEPT|MINUS|DELETE|INSERT|INTO|UPDATE|SET)\b/gi;
+const MAIN_RE = /\b(SELECT|FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+OUTER\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|NATURAL\s+JOIN|JOIN|ON|UNION|UNION\s+ALL|INTERSECT|EXCEPT|MINUS|DELETE|INSERT|INTO|UPDATE|SET|WITH|CREATE|MERGE)\b/gi;
 
 function formatTop(sql, opts) {
     const segs = splitByClauses(sql);
@@ -112,8 +116,10 @@ function formatTop(sql, opts) {
         const isSubClause = /^\s/.test(part);         // 缩进子句（JOIN/ON等）
         const isUnion = /^(UNION|INTERSECT|EXCEPT|MINUS)\b/i.test(part.trim());
         const hasComment = part.includes('__C') || part.includes('__K');  // 注释/CASE 占位符不可合并
+        // GROUP BY / ORDER BY / HAVING / LIMIT / OFFSET / SET 各自独立成行，不与上一段合并
+        const isClauseHead = /^(GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|SET)\b/i.test(part.trim());
 
-        if (isMulti || isSubClause || isUnion || hasComment) {
+        if (isMulti || isSubClause || isUnion || hasComment || isClauseHead) {
             if (cur) { lines.push(cur); cur = ''; }
             lines.push(part);
             continue;
@@ -133,12 +139,18 @@ function formatTop(sql, opts) {
 
 function splitByClauses(sql) {
     const segs = []; let last=0, kw='', m;
+    let mergeMode = false;   // MERGE 内部不再按从句拆分
     const re = new RegExp(MAIN_RE.source, 'gi');
     while ((m = re.exec(sql)) !== null) {
         if (depthAt(sql, last, m.index) !== 0) continue;
+        if (mergeMode) continue;
+        const kwUpper = m[1].toUpperCase();
+        // CREATE TABLE 存储子句的 "INTO n BUCKETS" 不视为从句
+        if (kwUpper === 'INTO' && /\d+\s+BUCKETS?/i.test(sql.slice(m.index + 4, m.index + 40))) continue;
         if (last < m.index && kw) segs.push({kw, content: sql.slice(last, m.index).trim()});
         else if (last < m.index && !kw) { const pre = sql.slice(last, m.index).trim(); if (pre) segs.push({kw:'', content:pre}); }
-        kw = m[1].toUpperCase(); last = m.index + m[0].length;
+        kw = kwUpper; last = m.index + m[0].length;
+        if (kwUpper === 'MERGE') mergeMode = true;
     }
     if (last < sql.length && kw) segs.push({kw, content: sql.slice(last).trim()});
     // 合并 INSERT INTO / DELETE FROM
@@ -169,6 +181,19 @@ function formatSegment(seg, opts) {
         }
         case 'GROUP BY': case 'ORDER BY': return formatCommaList(kw, content, opts);
         case 'LIMIT': case 'OFFSET': return kw+' '+content;
+        case 'UPDATE': return 'UPDATE '+formatSubqueryContent(content, opts);
+        case 'SET': {
+            // UPDATE 的 SET：赋值列表逗号优先逐行，不与 UPDATE 合并
+            const items = splitComma(content).map(s=>s.trim()).filter(Boolean);
+            if (items.length <= 1) return 'SET '+items[0];
+            const lines = ['SET '+formatSubqueryContent(items[0], opts)];
+            const pad = ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
+            for (let i=1; i<items.length; i++) lines.push(pad+formatSubqueryContent(items[i], opts));
+            return lines.join('\n');
+        }
+        case 'CREATE': return formatCreate(content, opts);
+        case 'WITH': return formatWith(content, opts);
+        case 'MERGE': return formatMerge(content, opts);
         default:
             if (kw.includes('JOIN')) {
                 lastJoinEndCol = CI.length + kw.length;  // 记录 JOIN 结束列，供 ON 对齐
@@ -184,15 +209,20 @@ function formatSegment(seg, opts) {
 function formatCommaList(kw, content, opts) {
     let items = splitComma(content).map(s=>s.trim()).filter(Boolean);
 
-    // 拆分 "__C__ field" 为 [__C__, field]，注释独立成行
+    // 注释归属：`field, -- 注释\n next` → 注释挂到前一个字段行尾（N03），不再独立成行
+    items = reattachComments(items);
+
+    // 拆分行内注释："__C__ field" 拆为 [__C__, field]（注释独立成行，幂等）
     const expanded = [];
     for (const item of items) {
-        const m = item.match(/^(__C\d+__)\s+(.+)$/);
-        if (m) {
-            expanded.push(m[1]);  // 注释占位符（restore 后变 -- comment\n）
-            expanded.push(m[2]);  // 字段
-        } else {
-            expanded.push(item);
+        if (!item.includes('__C')) { expanded.push(item); continue; }
+        for (const line of item.split('\n')) {
+            const t = line.trim();
+            if (!t) continue;
+            if (/^__C\d+__$/.test(t)) { expanded.push(t); continue; }
+            const m = t.match(/^(__C\d+__)\s+(.+)$/);
+            if (m) { expanded.push(m[1]); expanded.push(m[2]); continue; }
+            expanded.push(t);
         }
     }
     items = expanded;
@@ -213,6 +243,9 @@ function formatCommaList(kw, content, opts) {
             return kw + ' ' + items.join(', ');
         }
     }
+
+    // SELECT 字段：AS 对齐 + 注释对齐
+    if (isSelect) items = alignSelectFields(items, opts);
 
     // 逗号拆分（commaFirst=true 逗号在行首；false 逗号在行尾）
     const INDENT = ' '.repeat(opts.indentSize);
@@ -243,12 +276,72 @@ function formatCommaList(kw, content, opts) {
     return lines.join('\n');
 }
 
+/**
+ * 计算占位符还原后的真实长度（用于对齐：__S/__C 占位符长度 ≠ 还原后长度）
+ */
+function effectiveLen(text) {
+    return text.replace(/__(S|C)(\d+)__/g, (m, t, n) => (t === 'S' ? storeS : storeC)[+n] || m).length;
+}
+
+/**
+ * SELECT 字段 AS/注释对齐：
+ *   - ≥2 个含 AS 的字段 → AS 关键字列对齐
+ *   - ≥2 个含尾部注释的字段 → 注释列对齐
+ * 仅处理单行字段；注释项（__C）、多行项（子查询等）跳过。
+ */
+function alignSelectFields(items, opts) {
+    const info = items.map((it, i) => {
+        if (/^__C\d+__$/.test(it) || it.includes('\n')) return { i, plain: it };
+        let body = it, comment = null;
+        // 尾部注释占位符（__C）分离
+        const cm = it.match(/^(.*?)[ \t]+(__C\d+__)$/);
+        if (cm) { body = cm[1].trim(); comment = cm[2]; }
+        // AS 分离
+        let expr = body, alias = null;
+        const am = body.match(/^(.*?)[ \t]+AS[ \t]+(.+)$/i);
+        if (am) { expr = am[1].trim(); alias = 'AS ' + am[2].trim(); }
+        return { i, body, expr, alias, comment, hasComment: comment !== null, hasAlias: alias !== null };
+    });
+
+    // 第一遍：AS 对齐（用还原后长度）
+    const aliasItems = info.filter(x => x.hasAlias);
+    if (aliasItems.length >= 2) {
+        const maxExpr = Math.max(...aliasItems.map(x => effectiveLen(x.expr)));
+        for (const x of info) {
+            if (x.plain !== undefined) continue;
+            x.body = x.hasAlias
+                ? x.expr + ' '.repeat(Math.max(maxExpr - effectiveLen(x.expr) + 1, 1)) + x.alias
+                : x.expr;
+        }
+    } else {
+        for (const x of info) if (x.plain === undefined && x.alias) x.body = x.expr + ' ' + x.alias;
+    }
+
+    // 第二遍：注释对齐（用还原后长度）
+    const commentItems = info.filter(x => x.hasComment);
+    if (commentItems.length >= 2) {
+        const maxBody = Math.max(...commentItems.map(x => effectiveLen(x.body)));
+        for (const x of info) {
+            if (x.plain !== undefined) continue;
+            x.body = x.hasComment
+                ? x.body + ' '.repeat(Math.max(maxBody - effectiveLen(x.body) + 1, 1)) + x.comment
+                : x.body;
+        }
+    } else {
+        for (const x of info) if (x.plain === undefined && x.hasComment) x.body = x.body + ' ' + x.comment;
+    }
+
+    const result = items.slice();
+    for (const x of info) if (x.plain === undefined) result[x.i] = x.body;
+    return result;
+}
+
 function formatAndList(kw, content, andIndent, opts) {
     // andAlign=false: 不强制将 AND/OR 条件拆成多行，保持内联
     if (!opts.andAlign) {
         return kw + ' ' + formatSubqueryContent(content, opts);
     }
-    const parts = splitAndOr(content).map(s=>s.trim()).filter(Boolean);
+    const parts = splitAndOrWithOps(content);
     if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts);
     // 短行捷径：仅当内容本身就短（≤30）且无换行时合并单行
     if (parts.length===2 && !content.includes('\n') && (kw+' '+content).length<=30) {
@@ -256,8 +349,8 @@ function formatAndList(kw, content, andIndent, opts) {
     }
     const lines = [];
     for (let i=0; i<parts.length; i++) {
-        const partFormatted = formatSubqueryContent(parts[i], opts);
-        lines.push(i===0 ? (kw+' '+partFormatted) : (andIndent+'AND '+partFormatted));
+        const partFormatted = formatSubqueryContent(parts[i].text, opts);
+        lines.push(i===0 ? (kw+' '+partFormatted) : (andIndent+parts[i].op+' '+partFormatted));
     }
     return lines.join('\n');
 }
@@ -275,6 +368,8 @@ function splitAndOrWithOps(text) {
         let d = 0; for (let i = last; i < m.index; i++) { if (text[i] === '(') d++; else if (text[i] === ')') d--; }
         if (d === 0) {
             const kw = m[1].toUpperCase();
+            // 限定标识符（t.and / t.or）跳过
+            if (text[m.index - 1] === '.') continue;
             if (kw === 'BETWEEN') { inBetween = true; continue; }
             if (inBetween && kw === 'AND') { inBetween = false; continue; }
             const seg = text.slice(last, m.index).trim();
@@ -291,6 +386,154 @@ function splitAndOrWithOps(text) {
 // 给多行文本的每一行加缩进前缀
 function indentBlock(text, pad) {
     return text.split('\n').map(l => pad + l).join('\n');
+}
+
+// 注释归属：`field, -- 注释\n next` → 注释挂到前一个字段/列行尾（N03），不再独立成行
+function reattachComments(items) {
+    const out = [];
+    for (const item of items) {
+        const m = item.match(/^(__C\d+__)[ \t]*\n[ \t]*(.+)$/);
+        if (m && out.length > 0) {
+            out[out.length - 1] += ' ' + m[1];
+            out.push(m[2].trim());
+        } else {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
+// 从 openIndex（指向 '('）找匹配的 ')' 位置，找不到返回 -1
+function findMatchingParen(text, openIndex) {
+    let d = 0;
+    for (let i = openIndex; i < text.length; i++) {
+        if (text[i] === '(') d++;
+        else if (text[i] === ')') { d--; if (d === 0) return i; }
+    }
+    return -1;
+}
+
+// 拆分 CREATE TABLE 尾部的存储/分布子句，各独立成行
+function splitStorageClauses(tail) {
+    const parts = [];
+    const re = /\b(CLUSTERED|SORTED|INTO|STORED|LOCATION|TBLPROPERTIES|PARTITIONED|COMMENT|ROW FORMAT|FIELDS TERMINATED|LINES TERMINATED)\b/gi;
+    let last = 0, m;
+    while ((m = re.exec(tail)) !== null) {
+        if (m.index > last && tail.slice(last, m.index).trim()) parts.push(tail.slice(last, m.index).trim());
+        last = m.index;
+    }
+    const rest = tail.slice(last).trim();
+    if (rest) parts.push(rest);
+    return parts.filter(Boolean);
+}
+
+/**
+ * CREATE [TEMP|TEMPORARY] TABLE|VIEW 格式化：
+ *   - 列定义强制换行（不区分长度），逗号优先
+ *   - 尾部子句（CLUSTERED/SORTED/INTO/STORED 等）各自独立成行
+ */
+function formatCreate(content, opts) {
+    // 剥离语句尾分号，格式化后重新附着到最后一行
+    let semi = '';
+    const sm = content.match(/;[\s;]*$/);
+    if (sm) { semi = ';'; content = content.slice(0, sm.index).trim(); }
+
+    const IND = ' '.repeat(opts.indentSize);
+    const m = content.match(/^(TEMP\s+|TEMPORARY\s+)?(TABLE|VIEW)\s+([^\s(]+)([\s\S]*)$/i);
+    if (!m) return 'CREATE ' + content + semi;
+    const kind = ((m[1] || '') + m[2]).toUpperCase();
+    const name = m[3];
+    const rest = (m[4] || '').trim();
+
+    if (rest.startsWith('(')) {
+        const close = findMatchingParen(rest, 0);
+        if (close !== -1) {
+            const cols = rest.slice(1, close).trim();
+            const tail = rest.slice(close + 1).trim();
+            const lines = ['CREATE ' + kind + ' ' + name + ' ('];
+            // 列定义（含列内注释归属）
+            const colItems = reattachComments(splitComma(cols).map(s => s.trim()).filter(Boolean));
+            const commaPad = ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
+            colItems.forEach((c, i) => {
+                lines.push((i === 0 ? IND : commaPad) + formatSubqueryContent(c, opts));
+            });
+            lines.push(')');
+            if (tail) for (const clause of splitStorageClauses(tail)) lines.push(clause);
+            lines[lines.length - 1] += semi;
+            return lines.join('\n');
+        }
+    }
+    // 无括号列定义（如 CREATE TABLE ... AS SELECT，SELECT 已拆分到下一段）
+    if (rest) return 'CREATE ' + kind + ' ' + name + ' ' + rest + semi;
+    return 'CREATE ' + kind + ' ' + name + semi;
+}
+
+// 单个 CTE：`name [coldefs] AS (query)`，query 内 SELECT 递归格式化
+// baseIndent 为该 CTE 所在行的缩进（单 CTE 为 ''，多 CTE 为 IND），用于内层查询叠加缩进
+function formatCteItem(cte, opts, baseIndent) {
+    const IND = ' '.repeat(opts.indentSize);
+    let rec = '';
+    if (/^RECURSIVE\s+/i.test(cte)) { rec = 'RECURSIVE '; cte = cte.replace(/^RECURSIVE\s+/i, ''); }
+    const m = cte.match(/^([^\s(]+)(\s*\([^)]*\))?\s+AS\s+([\s\S]+)$/i);
+    if (!m) return rec + cte;
+    const name = m[1];
+    const coldefs = m[2] || '';
+    const query = m[3].trim();
+    const prefix = rec + name + coldefs + ' AS ';
+    let block;
+    if (query.startsWith('(')) {
+        block = formatSubqueryContent(query, opts);
+    } else {
+        // 裸 SELECT（WITH ... AS SELECT ...）
+        block = '(\n' + indentBlock(formatTop(query, opts), IND) + '\n)';
+    }
+    // 多 CTE 场景：块除首行外叠加 baseIndent
+    if (baseIndent) {
+        block = block.split('\n').map((l, i) => (i === 0 ? l : baseIndent + l)).join('\n');
+    }
+    return prefix + block;
+}
+
+// MERGE 格式化：INTO/USING/ON 各自一行；WHEN ... THEN 独立成行，动作缩进（SET 不与 WHEN 同行）
+function formatMerge(content, opts) {
+    let semi = '';
+    const sm = content.match(/;[\s;]*$/);
+    if (sm) { semi = ';'; content = content.slice(0, sm.index).trim(); }
+    const IND = ' '.repeat(opts.indentSize);
+    // lookahead 保留首个 WHEN，使分支从 WHEN 开始
+    const m = content.match(/^INTO\s+([^\s(]+)(?:\s+([^\s(]+))?\s+USING\s+([^\s(]+)(?:\s+([^\s(]+))?\s+ON\s+(.*?)(?=\s+WHEN\b)([\s\S]*)$/i);
+    if (!m) return 'MERGE ' + content + semi;
+    const lines = ['MERGE INTO ' + m[1] + (m[2] ? ' ' + m[2] : '')];
+    lines.push('USING ' + m[3] + (m[4] ? ' ' + m[4] : ''));
+    lines.push('ON ' + m[5].replace(/^\((.*)\)$/s, '$1').trim());
+    // 处理 WHEN MATCHED / WHEN NOT MATCHED THEN 分支
+    const branches = m[6];
+    const whenRe = /WHEN\s+(MATCHED|NOT\s+MATCHED)\s+THEN/gi;
+    let w;
+    while ((w = whenRe.exec(branches)) !== null) {
+        const label = 'WHEN ' + w[1].toUpperCase().replace(/\s+/g, ' ') + ' THEN';
+        const after = branches.slice(w.index + w[0].length);
+        const nextIdx = after.search(/\bWHEN\s+(?:MATCHED|NOT\s+MATCHED)\b/i);
+        const action = (nextIdx === -1 ? after : after.slice(0, nextIdx)).trim();
+        lines.push(label);
+        lines.push(IND + action);
+    }
+    lines[lines.length - 1] += semi;
+    return lines.join('\n');
+}
+
+// WITH CTE 格式化：每个 CTE 单独换行，逗号优先；内层 SELECT 递归格式化
+function formatWith(content, opts) {
+    const IND = ' '.repeat(opts.indentSize);
+    const ctes = splitComma(content).map(s => s.trim()).filter(Boolean);
+    if (ctes.length === 0) return 'WITH ' + content;
+    if (ctes.length === 1) return 'WITH ' + formatCteItem(ctes[0], opts, '');
+    const commaPad = ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
+    const lines = ['WITH'];
+    ctes.forEach((cte, i) => {
+        lines.push((i === 0 ? IND : commaPad) + formatCteItem(cte, opts, IND));
+    });
+    return lines.join('\n');
 }
 
 // ======================== 子查询递归 ========================
@@ -425,23 +668,40 @@ function postProcess(sql) {
 // formatCaseBlock 返回 { inline: string }（单行）或 { first: string, rest: string[] }（多行）。
 // rest 中的行是相对 "CASE 起始列" 的缩进行（END 相对缩进 0，与 CASE 对齐）。
 
+// 检测 CASE 内是否已含 OR 优先级告警注释（保证幂等）
+function caseHasWarning(caseText) {
+    const re = /__C(\d+)__/g;
+    let m;
+    while ((m = re.exec(caseText)) !== null) {
+        if ((storeC[+m[1]] || '').includes('建议用括号')) return true;
+    }
+    return false;
+}
+
 function formatCaseBlock(caseText, opts) {
     const IND = ' '.repeat(opts.indentSize || 4);
     // 1) 内层嵌套 CASE 保护为 __L
     const { text: t, store: nested } = protectNestedCases(caseText);
     // 2) 解析分支
     const { expr, branches, elseVal } = splitCaseBranches(t);
-    const header = expr ? 'CASE ' + expr : 'CASE';
+    // expr 可能只是注释占位符（二次格式化时告警注释回到此处）→ 独立成行
+    let exprLine = null;
+    let header = 'CASE';
+    if (expr) {
+        if (/^__C\d+__$/.test(expr)) exprLine = IND + expr;
+        else header = 'CASE ' + expr;
+    }
 
-    // 3) 单行判断：无嵌套、无子查询、无行注释（防注释吞后文）、分支 ≤2、总长 ≤80 → 一行
+    // 3) 单行判断：无嵌套、无子查询、无行注释、WHEN 无多条件、分支 ≤2、总长 ≤80 → 一行
     const hasNested = nested.length > 0;
     const hasSubquery = /\(\s*(SELECT|WITH)\b/i.test(caseText);
     const hasLineComment = /__C\d+__/.test(caseText);   // 行注释必须落到行尾，强制多行
+    const anyMultiCond = branches.some(b => splitAndOr(b.cond).length > 1);
     const inlineLen = header + ' ' +
         branches.map(b => 'WHEN ' + b.cond + ' THEN ' + b.val).join(' ') +
         (elseVal !== null ? ' ELSE ' + (elseVal || 'NULL') : '') + ' END';
     const inlineLimit = Math.min(80, opts.maxWidth || 80);
-    if (!hasNested && !hasSubquery && !hasLineComment && branches.length <= 2 && inlineLen.length <= inlineLimit) {
+    if (!hasNested && !hasSubquery && !hasLineComment && !anyMultiCond && branches.length <= 2 && inlineLen.length <= inlineLimit) {
         return { inline: inlineLen };
     }
 
@@ -456,7 +716,17 @@ function formatCaseBlock(caseText, opts) {
         return { cond, val, multiCond, single, singleOK, width: ('WHEN ' + cond).length };
     });
 
+    // 混合 AND/OR（无括号）→ 加优先级告警注释（幂等：已有则不重复加）
+    const mixedOr = branches.some(b => {
+        const p = splitAndOrWithOps(b.cond);
+        return p.some(x => x.op === 'OR') && p.some(x => x.op === 'AND');
+    });
+
     const lines = [header];
+    if (exprLine) lines.push(exprLine);
+    if (mixedOr && !caseHasWarning(caseText)) {
+        lines.push(IND + '-- ⚠ 混合 AND/OR，建议用括号明确优先级');
+    }
     const allSingle = branchInfos.every(x => x.singleOK);
     if (allSingle) {
         // 全部分支单行 → THEN 列对齐
@@ -512,6 +782,8 @@ function protectNestedCases(text) {
         if (!m) { r += text.slice(i); break; }
         const kw = m[0].toUpperCase();
         const idx = i + m.index;
+        // 限定标识符（t.CASE / t.END）跳过
+        if (text[idx - 1] === '.') { r += text.slice(i, idx + kw.length); i = idx + kw.length; continue; }
         if (kw === 'CASE') {
             // 找到该内层 CASE 的匹配 END
             const innerStart = idx;
@@ -520,6 +792,7 @@ function protectNestedCases(text) {
                 const e = text.slice(j2).match(/\b(CASE|END)\b/);
                 if (!e) break;
                 const k2 = e[0].toUpperCase(); const i2 = j2 + e.index;
+                if (text[i2 - 1] === '.') { j2 = i2 + k2.length; continue; }
                 if (k2 === 'CASE') d2++;
                 else { d2--; if (d2 === 0) { end2 = i2; break; } }
                 j2 = i2 + k2.length;
@@ -559,7 +832,8 @@ function findKwIn(t, from, re) {
             else if (t[i] === ')') depth = Math.max(0, depth - 1);
         }
         cursor = m.index + m[0].length;
-        if (depth === 0) return { kw: m[0].toUpperCase(), index: m.index };
+        // 限定标识符（t.WHEN 等）跳过
+        if (depth === 0 && t[m.index - 1] !== '.') return { kw: m[0].toUpperCase(), index: m.index };
         gre.lastIndex = cursor;
     }
     return null;

@@ -6,12 +6,29 @@
 
 ## 版本历史
 
+### v0.9.3 (2026-08)
+- **feat: SELECT 字段 AS 对齐 + 注释对齐** — ≥2 个含 AS 字段时 AS 列对齐；≥2 个带尾部注释时注释列对齐（按占位符还原后真实长度计算）
+- **feat: GROUP BY / ORDER BY / HAVING / LIMIT / OFFSET 各自独立成行** — 不再与 FROM/WHERE 合并
+- **feat: UPDATE SET 逐行** — SET 独立成行、赋值列表逗号优先逐行；DELETE 短则保持单行
+- **feat: CREATE TABLE 强制多行** — 列定义不区分长度逐行、逗号优先；列内注释归属；尾部 CLUSTERED/SORTED/INTO BUCKETS/STORED 等子句各自换行
+- **feat: WITH CTE 逐行** — 每个 CTE 单独换行、逗号优先、内层 SELECT 递归格式化；支持 RECURSIVE
+- **feat: WHEN 多条件强制换行 + OR 优先级告警** — 混合 AND/OR（无括号）时自动插入 `-- ⚠ 建议用括号明确优先级` 注释（幂等）
+- **feat: MERGE 格式化** — `MERGE INTO` / `USING` / `ON` 各自成行；`WHEN MATCHED/NOT MATCHED THEN` 独立成行、动作（UPDATE SET/INSERT）缩进，SET 不与 WHEN 同行；splitByClauses 对 MERGE 内部不再拆分
+- **fix: N03 字段后注释** — `col, -- 注释` 注释挂在字段行尾、逗号保留，不再独立成行
+- **fix: CREATE 存储子句 INTO n BUCKETS 不再被 splitByClauses 误切**
+- **fix: CTE 正则跨行** — `[\s\S]` 匹配多行查询体
+- 测试：场景测试扩至 71 个（新增 S06/DD5），两套测试全绿；`agent.js` 关键字计数忽略注释
+
 ### v0.9.2 (2026-08)
 - **refactor: 断舍离与精简** — 摘除 4 个模块的 16 个死导出（table-scanner / metadata-loader / completion-data / format-provider），收敛公共 API
 - **perf: findKwIn O(n²)→O(n)** — 全局正则迭代 + 光标累积括号深度，优化大 CASE 解析
 - **refactor: splitAndOr 复用 splitAndOrWithOps** — 消除 ~20 行重复扫描逻辑，行为永不漂移
 - **chore: 删除 test/semantic_diff.js（477 行）** — 功能已并入 agent.js，并将唯一独有的"行内注释断裂"检查移植进 agent.js
-- 测试全部通过（语义对比 + 结构问题检测，含新增"行内注释断裂"检查）
+- **fix: formatAndList 保留 OR 连接词** — 多条件拆分时 OR 不再被误写成 AND
+- **fix: 限定标识符保护** — `t.case` / `t.when` / `t.end` 等撞关键字的列名不再被误判为 CASE 关键字（protectCase / protectNestedCases / findKwIn / splitAndOrWithOps 增加 `.` 前缀守卫）
+- **fix: formatCommaList 注释独立行幂等** — 支持 `field\n-- 注释\nfield` 形态拆分，注释独立成行后二次格式化不再漂移
+- **feat: 新增 test/scenarios.js 全面场景测试** — 15 类 69 个场景，7 项检查（关键字/字符串/语句数/占位符泄漏/幂等/注释吞后文/括号平衡），报告输出 `testdata/scenario_test_report.md`，`npm run test:scenarios`
+- 测试全部通过（语义对比 + 结构问题检测 + 69 场景）
 
 ### v0.9.1 (2026-08)
 - **新增 CASE WHEN 格式化** — 短 CASE 保持单行；长 CASE 时 `CASE`/`END` 列对齐、`WHEN cond THEN val` 短则一行长则 THEN 列对齐、WHEN 内多条件按 AND/OR 对齐拆行、支持简单 CASE（`CASE expr`）与嵌套 CASE 递归

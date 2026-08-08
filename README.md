@@ -58,9 +58,11 @@
 │       └── deps-view-provider.js       # 侧面板表依赖树视图
 ├── test/
 │   ├── agent.js                        # 测试运行器（语义对比 + 结构问题检测）
+│   ├── scenarios.js                    # 全面场景测试（15 类 69 场景）
 │   └── boundary_edge_cases_report.md   # 边界测试报告
 └── testdata/
-    └── sql/                            # 测试 SQL 文件
+    ├── sql/                            # 测试 SQL 文件
+    └── scenario_test_report.md         # 场景测试报告（自动生成）
 ```
 
 ---
@@ -264,6 +266,7 @@ npm test              # CI 模式测试
 npm run test:verbose  # 详细输出
 npm run test:dir      # 目录模式
 npm run test:format   # 仅格式化测试
+npm run test:scenarios # 全面场景测试（15 类 69 场景，生成 scenario_test_report.md）
 ```
 
 ### F5 调试
