@@ -1,14 +1,14 @@
 # SQL Formatter 全面场景测试报告
 
-> 生成时间: 2026-08-08 03:43:30
-> 覆盖类别: 15 类 · 71 个场景
+> 生成时间: 2026-08-08 09:03:46
+> 覆盖类别: 15 类 · 76 个场景
 
 ## 汇总
 
 | 指标 | 数值 |
 |---|---|
-| 场景总数 | 71 |
-| ✅ 通过 | 71 |
+| 场景总数 | 76 |
+| ✅ 通过 | 76 |
 | ❌ 失败 | 0 |
 | 通过率 | 100.0% |
 
@@ -152,13 +152,18 @@
 | M01 | 多条语句分号分隔 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | M02 | BEGIN...END 块 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### 边界 （3/3）
+### 边界 （8/8）
 
 | 编号 | 场景 | 关键字 | 字符串 | 语句数 | 无泄漏 | 幂等 | 注释 | 括号 | 结果 |
 |---|---|---|---|---|---|---|---|---|---|
 | E01 | 空/纯注释输入 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E02 | 深层嵌套括号函数 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E03 | 无引号标识符边界 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E04 | 多语句块注释内嵌行注释+字符串 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E05 | 多行表达式含行尾注释（不拆散） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E06 | AS 在表达式内（CAST AS STRING） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E07 | 含子查询字段 AS（不参与对齐） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E08 | 行注释含字符串/变量 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## 输入 / 输出示例
 
@@ -1710,6 +1715,121 @@ SELECT
   , t.CASE
   , t.WHEN
 FROM t;
+```
+
+</details>
+
+### E04 — 多语句块注释内嵌行注释+字符串 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT 1; SELECT 2 /* a
+ -- inner line 'x'
+ -- more 'y'
+ */ FROM t;
+```
+
+**输出:**
+```sql
+SELECT 1;
+
+SELECT 2 /* a
+ -- inner line 'x'
+ -- more 'y'
+ */
+FROM t
+```
+
+</details>
+
+### E05 — 多行表达式含行尾注释（不拆散） 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT SUM(CASE WHEN x = 'C' AND nvl(a,'') = '' THEN b ELSE 0 END
+ ) / 100 AS ACCU --累计
+FROM t;
+```
+
+**输出:**
+```sql
+SELECT SUM(CASE
+               WHEN x = 'C'
+               AND nvl(a,'') = ''
+               THEN b
+               ELSE 0
+           END
+ ) / 100 AS ACCU --累计
+FROM t;
+```
+
+</details>
+
+### E06 — AS 在表达式内（CAST AS STRING） 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT CAST(DATE(x, 'YYYY-MM-DD') AS STRING) AS a, y AS bb FROM t;
+```
+
+**输出:**
+```sql
+SELECT
+    CAST(DATE(x, 'YYYY-MM-DD') AS STRING) AS a
+  , y                                     AS bb
+FROM t;
+```
+
+</details>
+
+### E07 — 含子查询字段 AS（不参与对齐） 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT nvl((SELECT max(v) FROM t2 WHERE t2.id = t.id), 0) AS a, b AS bb FROM t;
+```
+
+**输出:**
+```sql
+SELECT
+    nvl((
+    SELECT max(v) FROM t2 WHERE t2.id = t.id
+), 0) AS a
+  , b AS bb
+FROM t;
+```
+
+</details>
+
+### E08 — 行注释含字符串/变量 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT 1; SELECT a -- 注释 'xyz' ${V_OG}
+FROM t;
+```
+
+**输出:**
+```sql
+SELECT 1;
+
+SELECT a -- 注释 'xyz' ${V_OG}
+FROM t
 ```
 
 </details>

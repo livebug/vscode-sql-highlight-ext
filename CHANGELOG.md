@@ -7,6 +7,12 @@
 ## 版本历史
 
 ### v0.9.3 (2026-08)
+- **fix: 真实生产 SQL 全面校验修复** — 用真实大 SQL（`testdata/sql/test.sql`，8 条语句、13 个 CASE、多段注释/子查询）做端到端验证，修复 4 类内容丢失/幂等 bug：
+  - **restore()/postProcess() 改为迭代式恢复**（fixpoint）：解决块注释内嵌行注释、注释内嵌字符串/变量导致的占位符泄漏（`__S/__C/__O` 泄漏）
+  - **formatCommaList 注释拆分加"注释边界"守卫**：仅当存在行首注释占位符才按行拆，多行表达式（如 `SUM(CASE...END)\n) / 100000000 AS x -- 注释`）不再被拆散导致括号/运算符丢失
+  - **alignSelectFields AS 贪婪匹配**：表达式内 `CAST(... AS STRING)` 不再被误当别名分隔符
+  - **alignSelectFields 跳过含子查询字段**：含 `(SELECT/WITH)` 的字段展开后必为多行，排除对齐保证幂等
+  - 校验结果：语义对比 5/5 PASS、无占位符泄漏、无字符串/变量丢失、幂等稳定；场景测试扩至 76 个（新增 E04-E08 回归）
 - **feat: SELECT 字段 AS 对齐 + 注释对齐** — ≥2 个含 AS 字段时 AS 列对齐；≥2 个带尾部注释时注释列对齐（按占位符还原后真实长度计算）
 - **feat: GROUP BY / ORDER BY / HAVING / LIMIT / OFFSET 各自独立成行** — 不再与 FROM/WHERE 合并
 - **feat: UPDATE SET 逐行** — SET 独立成行、赋值列表逗号优先逐行；DELETE 短则保持单行

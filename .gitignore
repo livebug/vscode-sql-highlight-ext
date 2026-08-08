@@ -3,3 +3,5 @@
 .vscode-test/
 *.vsix
 node_modules/
+testdata/sql/test.sql
+testdata/sql/test_formatted.sql

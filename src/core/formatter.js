@@ -25,10 +25,19 @@ function protect(sql) {
 
 function restore(sql) {
     let r = sql;
-    storeO.forEach((v,i) => { r = r.replace('__O'+i+'__', uppercase(v.replace(/^\s*\(/, ' ('))); });
-    storeS.forEach((v,i) => { r = r.replace('__S'+i+'__', v); });
-    storeC.forEach((v,i) => { r = r.replace('__C'+i+'__', v); });
-    storeV.forEach((v,i) => { r = r.replace('__V'+i+'__', v); });
+    // 迭代到无占位符为止：支持任意深度嵌套（块注释内嵌行注释、注释内嵌字符串/变量等），
+    // 修复"外层恢复后才暴露内层占位符，但索引已过"导致的占位符泄漏
+    for (let pass = 0; pass < 10; pass++) {
+        let changed = false;
+        const doReplace = (token, val) => {
+            if (r.indexOf(token) !== -1) { r = r.split(token).join(val); changed = true; }
+        };
+        storeC.forEach((v, i) => doReplace('__C' + i + '__', v));
+        storeS.forEach((v, i) => doReplace('__S' + i + '__', v));
+        storeV.forEach((v, i) => doReplace('__V' + i + '__', v));
+        storeO.forEach((v, i) => doReplace('__O' + i + '__', uppercase(v.replace(/^\s*\(/, ' ('))));
+        if (!changed) break;
+    }
     return r;
 }
 
@@ -212,11 +221,17 @@ function formatCommaList(kw, content, opts) {
     // 注释归属：`field, -- 注释\n next` → 注释挂到前一个字段行尾（N03），不再独立成行
     items = reattachComments(items);
 
-    // 拆分行内注释："__C__ field" 拆为 [__C__, field]（注释独立成行，幂等）
+    // 拆分行内注释："__C__ field" / "field\n__C__\nfield2" 拆为注释独立项（幂等）。
+    // 关键：仅当存在"注释边界行"（行首是注释占位符）才按行拆；多行表达式
+    // （如 SUM(CASE...END)\n) / 100000000 AS x -- 注释，行首不是 __C）保持完整，
+    // 避免括号结构被拆散导致括号/运算符丢失。
     const expanded = [];
     for (const item of items) {
         if (!item.includes('__C')) { expanded.push(item); continue; }
-        for (const line of item.split('\n')) {
+        const lines = item.split('\n').map(l => l.trim()).filter(Boolean);
+        const hasCommentBoundary = lines.some(l => /^__C\d+__$/.test(l) || /^__C\d+__\s+/.test(l));
+        if (!hasCommentBoundary) { expanded.push(item); continue; }
+        for (const line of lines) {
             const t = line.trim();
             if (!t) continue;
             if (/^__C\d+__$/.test(t)) { expanded.push(t); continue; }
@@ -291,14 +306,15 @@ function effectiveLen(text) {
  */
 function alignSelectFields(items, opts) {
     const info = items.map((it, i) => {
-        if (/^__C\d+__$/.test(it) || it.includes('\n')) return { i, plain: it };
+        // 注释项、多行项、含子查询项（(SELECT/WITH) 展开后必为多行）不参与对齐，保证幂等
+        if (/^__C\d+__$/.test(it) || it.includes('\n') || /\(\s*(SELECT|WITH)\b/i.test(it)) return { i, plain: it };
         let body = it, comment = null;
         // 尾部注释占位符（__C）分离
         const cm = it.match(/^(.*?)[ \t]+(__C\d+__)$/);
         if (cm) { body = cm[1].trim(); comment = cm[2]; }
-        // AS 分离
+        // AS 分离：贪婪匹配最后一个 " AS "（表达式内可能有 CAST(... AS STRING) 等，不能取第一个）
         let expr = body, alias = null;
-        const am = body.match(/^(.*?)[ \t]+AS[ \t]+(.+)$/i);
+        const am = body.match(/^(.*)[ \t]+AS[ \t]+(.+)$/i);
         if (am) { expr = am[1].trim(); alias = 'AS ' + am[2].trim(); }
         return { i, body, expr, alias, comment, hasComment: comment !== null, hasAlias: alias !== null };
     });
@@ -658,9 +674,19 @@ function postProcess(sql) {
     sql = sql.replace(/;(\s*\n\s*)(?=\S)/g, ';\n\n');
     sql = sql.replace(/\n{3,}/g, '\n\n');
 
-    // 恢复注释和字符串
-    pcStore.forEach((v, i) => { sql = sql.replace('__PC'+i+'__', v); });
-    pcStrings.forEach((v, i) => { sql = sql.replace('__PS'+i+'__', v); });
+    // 恢复注释和字符串（迭代到无占位符：块注释内可嵌套行注释/字符串，需多轮）
+    for (let pass = 0; pass < 10; pass++) {
+        let changed = false;
+        pcStore.forEach((v, i) => {
+            const tok = '__PC' + i + '__';
+            if (sql.indexOf(tok) !== -1) { sql = sql.split(tok).join(v); changed = true; }
+        });
+        pcStrings.forEach((v, i) => {
+            const tok = '__PS' + i + '__';
+            if (sql.indexOf(tok) !== -1) { sql = sql.split(tok).join(v); changed = true; }
+        });
+        if (!changed) break;
+    }
     return sql;
 }
 

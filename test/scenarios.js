@@ -121,6 +121,11 @@ const SCENARIOS = [
     { id: 'E01', cat: '边界', name: '空/纯注释输入', sql: "-- 只有注释\n/* 块注释 */\n" },
     { id: 'E02', cat: '边界', name: '深层嵌套括号函数', sql: "SELECT func(a, func2(b, func3(c, d)), e) AS r FROM t;" },
     { id: 'E03', cat: '边界', name: '无引号标识符边界', sql: "SELECT a, a_end, end_flag, t.case, t.when FROM t;" },
+    { id: 'E04', cat: '边界', name: '多语句块注释内嵌行注释+字符串', sql: "SELECT 1; SELECT 2 /* a\n -- inner line 'x'\n -- more 'y'\n */ FROM t;" },
+    { id: 'E05', cat: '边界', name: '多行表达式含行尾注释（不拆散）', sql: "SELECT SUM(CASE WHEN x = 'C' AND nvl(a,'') = '' THEN b ELSE 0 END\n ) / 100 AS ACCU --累计\nFROM t;" },
+    { id: 'E06', cat: '边界', name: 'AS 在表达式内（CAST AS STRING）', sql: "SELECT CAST(DATE(x, 'YYYY-MM-DD') AS STRING) AS a, y AS bb FROM t;" },
+    { id: 'E07', cat: '边界', name: '含子查询字段 AS（不参与对齐）', sql: "SELECT nvl((SELECT max(v) FROM t2 WHERE t2.id = t.id), 0) AS a, b AS bb FROM t;" },
+    { id: 'E08', cat: '边界', name: '行注释含字符串/变量', sql: "SELECT 1; SELECT a -- 注释 'xyz' ${V_OG}\nFROM t;" },
 ];
 
 // ======================== 校验工具 ========================
