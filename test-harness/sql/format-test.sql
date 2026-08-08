@@ -25,9 +25,29 @@ SELECT * FROM customer WHERE cust_id = 'C001';
 INSERT INTO customer (cust_id, cust_name) VALUES ('C002', '测试客户');
 UPDATE customer SET status = 'INACTIVE' WHERE cust_id = 'C002';
 
--- 测试6: CASE WHEN 格式化
--- 格式化后 CASE/WHEN/THEN/ELSE/END 应保持清晰
-SELECT cust_id, CASE WHEN balance > 10000 THEN 'HIGH' WHEN balance > 1000 THEN 'MEDIUM' ELSE 'LOW' END AS balance_level FROM acct_info;
+-- 测试6: CASE WHEN 格式化（短则单行）
+-- 格式化后短 CASE 保持单行
+SELECT cust_id, CASE WHEN balance > 10000 THEN 'HIGH' ELSE 'LOW' END AS balance_level FROM acct_info;
+
+-- 测试6a: CASE WHEN 长 CASE（CASE/END 对齐 + THEN 对齐）
+-- 格式化后 CASE/END 对齐，WHEN/THEN 独立行并对齐
+SELECT cust_id, CASE WHEN balance > 10000 THEN 'HIGH' WHEN balance > 1000 THEN 'MEDIUM' WHEN balance > 100 THEN 'LOW' ELSE 'VERY LOW' END AS balance_level FROM acct_info;
+
+-- 测试6b: 简单 CASE（CASE expr）
+SELECT CASE status WHEN 1 THEN 'active' WHEN 2 THEN 'inactive' WHEN 3 THEN 'disabled' WHEN 4 THEN 'archived' ELSE 'unknown' END AS st FROM users;
+
+-- 测试6c: WHEN 内多条件（AND/OR 对齐）
+SELECT CASE WHEN balance > 10000 AND acct_type = 'SAVING' OR cust_level = 'VIP' THEN 'HIGH' WHEN balance > 1000 THEN 'MEDIUM' ELSE 'LOW' END AS level FROM acct_info;
+
+-- 测试6d: 嵌套 CASE
+SELECT CASE WHEN a > 1 THEN CASE WHEN b > 1 THEN 'x' WHEN b > 0 THEN 'y' ELSE 'z' END WHEN a > 0 THEN 'm' ELSE 'n' END AS t FROM tab;
+
+-- 测试6e: CASE 内行注释（注释应落在行尾，不吞后文）
+SELECT CASE WHEN a > 1 THEN 'x' -- 条件一
+ WHEN a > 0 THEN 'y' ELSE 'z' END AS t FROM tab;
+SELECT id, CASE WHEN status = 1 THEN 'ok' -- 正常
+ WHEN status = 2 THEN 'warn' -- 警告
+ ELSE 'err' END AS st FROM t;
 
 -- 测试7: OVER() 窗口函数保护
 -- 格式化后 OVER 内 PARTITION BY/ORDER BY 不应被拆分

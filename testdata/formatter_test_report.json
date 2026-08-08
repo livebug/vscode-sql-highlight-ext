@@ -2,7 +2,7 @@
   {
     "file": "semantic-test.sql",
     "filePath": "testdata/sql/semantic-test.sql",
-    "timestamp": "2026-08-08T00:22:13.153Z",
+    "timestamp": "2026-08-08T00:37:23.278Z",
     "checks": [
       {
         "name": "关键字计数",
@@ -28,7 +28,12 @@
     "issues": {
       "semantic": [],
       "formatting": [],
-      "warnings": []
+      "warnings": [
+        {
+          "check": "归一化语义",
+          "detail": "去注释后文本存在差异（可能受注释内特殊字符影响）"
+        }
+      ]
     },
     "passed": true,
     "summary": {
@@ -43,7 +48,7 @@
   {
     "file": "subquery_test.sql",
     "filePath": "testdata/sql/subquery_test.sql",
-    "timestamp": "2026-08-08T00:22:13.157Z",
+    "timestamp": "2026-08-08T00:37:23.287Z",
     "checks": [
       {
         "name": "关键字计数",

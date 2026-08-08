@@ -6,6 +6,11 @@
 
 ## 版本历史
 
+### v0.9.1 (2026-08)
+- **新增 CASE WHEN 格式化** — 短 CASE 保持单行；长 CASE 时 `CASE`/`END` 列对齐、`WHEN cond THEN val` 短则一行长则 THEN 列对齐、WHEN 内多条件按 AND/OR 对齐拆行、支持简单 CASE（`CASE expr`）与嵌套 CASE 递归
+- **修复 CASE 内行注释吞后文** — `WHEN ... THEN 'x' -- 注释` 场景强制多行，确保 `-- 注释` 落在行尾不再吞掉后续 `WHEN/ELSE/END`
+- 通过 `protectCase` 占位符保护，避免 THEN 值中的逗号 / AND 干扰现有逗号优先与 AND 对齐逻辑
+
 ### v0.9.0 (2026-07)
 - **重构项目结构** — 源码移入 `src/` 目录，按 `core/` `providers/` `views/` 三层架构组织
 - **extension.js 模块化拆分** — 从 600+ 行精简至 ~150 行入口文件，拆出 7 个独立 provider

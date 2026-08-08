@@ -9,6 +9,7 @@ const DEFAULTS = { indentSize: 4, maxWidth: 200, commaFirst: true, andAlign: tru
 
 // ======================== 保护/恢复 ========================
 let storeV=[], storeC=[], storeS=[], storeO=[], ciV=0, ciC=0, ciS=0, ciO=0;
+let storeK=[], ciK=0;   // CASE WHEN 保护存储
 
 function protect(sql) {
     storeV=[]; storeC=[]; storeS=[]; storeO=[]; ciV=0; ciC=0; ciS=0; ciO=0;
@@ -50,6 +51,36 @@ function protectOver(sql) {
     return r;
 }
 
+// ======================== CASE WHEN 保护 ========================
+// 把 CASE...END（含嵌套，深度配对）整体替换为 __K 占位符。
+// 前提：字符串/注释已保护为占位符，文本已大写。
+function protectCase(sql) {
+    storeK=[]; ciK=0;
+    let r='', i=0;
+    while (i < sql.length) {
+        const m = sql.slice(i).match(/\bCASE\b/);
+        if (!m) { r += sql.slice(i); break; }
+        const caseStart = i + m.index;
+        // 深度配对找匹配的 END（忽略括号，嵌套 CASE 整体包含）
+        let caseDepth = 1, j = caseStart + 4, endPos = -1;
+        while (j < sql.length) {
+            const e = sql.slice(j).match(/\b(CASE|END)\b/);
+            if (!e) break;
+            const kw = e[0].toUpperCase();
+            const idx = j + e.index;
+            if (kw === 'CASE') caseDepth++;
+            else { caseDepth--; if (caseDepth === 0) { endPos = idx; break; } }
+            j = idx + kw.length;
+        }
+        if (endPos === -1) { r += sql.slice(caseStart); break; }
+        r += sql.slice(i, caseStart);
+        storeK.push(sql.slice(caseStart, endPos + 3));   // 含 END
+        r += '__K' + (ciK++) + '__';
+        i = endPos + 3;
+    }
+    return r;
+}
+
 // ======================== 关键字 ========================
 const KEYWORDS = require('./keywords');
 
@@ -80,7 +111,7 @@ function formatTop(sql, opts) {
         const isMulti = part.includes('\n');
         const isSubClause = /^\s/.test(part);         // 缩进子句（JOIN/ON等）
         const isUnion = /^(UNION|INTERSECT|EXCEPT|MINUS)\b/i.test(part.trim());
-        const hasComment = part.includes('__C');
+        const hasComment = part.includes('__C') || part.includes('__K');  // 注释/CASE 占位符不可合并
 
         if (isMulti || isSubClause || isUnion || hasComment) {
             if (cur) { lines.push(cur); cur = ''; }
@@ -236,6 +267,32 @@ function splitComma(text) { const r=[]; let d=0,cur=''; for (const ch of text) {
 
 function splitAndOr(text) { const r=[]; let last=0; const re=/\b(AND|OR|BETWEEN)\b/gi; let m, inBetween=false; while ((m=re.exec(text))!==null) { let d=0; for (let i=last; i<m.index; i++) { if (text[i]==='(') d++; else if (text[i]===')') d--; } if (d===0) { const kw=m[1].toUpperCase(); if (kw==='BETWEEN') { inBetween=true; continue; } if (inBetween && kw==='AND') { inBetween=false; continue; } r.push(text.slice(last, m.index)); last=m.index+m[0].length; inBetween=false; } } r.push(text.slice(last)); return r.filter(s=>s.trim()); }
 
+// 拆分 AND/OR 并保留连接词（连接词属于其后一段；BETWEEN 的 AND 不拆分）
+function splitAndOrWithOps(text) {
+    const parts = []; let last = 0; const re = /\b(AND|OR|BETWEEN)\b/gi; let m, inBetween = false;
+    let pendingOp = '';
+    while ((m = re.exec(text)) !== null) {
+        let d = 0; for (let i = last; i < m.index; i++) { if (text[i] === '(') d++; else if (text[i] === ')') d--; }
+        if (d === 0) {
+            const kw = m[1].toUpperCase();
+            if (kw === 'BETWEEN') { inBetween = true; continue; }
+            if (inBetween && kw === 'AND') { inBetween = false; continue; }
+            const seg = text.slice(last, m.index).trim();
+            if (seg) parts.push({ text: seg, op: pendingOp });
+            pendingOp = kw;
+            last = m.index + m[0].length; inBetween = false;
+        }
+    }
+    const seg = text.slice(last).trim();
+    if (seg) parts.push({ text: seg, op: pendingOp });
+    return parts;
+}
+
+// 给多行文本的每一行加缩进前缀
+function indentBlock(text, pad) {
+    return text.split('\n').map(l => pad + l).join('\n');
+}
+
 // ======================== 子查询递归 ========================
 function formatSubqueryContent(content, opts) {
     let r='', i=0;
@@ -331,8 +388,11 @@ function formatSingleSQL(sql, options) {
     w = w.replace(/[ \t]+/g, ' ').trim();
     w = uppercase(w);
     w = protectOver(w);
+    w = protectCase(w);          // CASE...END → __K 占位符
     w = formatTop(w, opts);
     w = restore(w);
+    w = expandAllCases(w, opts); // __K → 格式化好的多行 CASE 块
+    w = restore(w);              // 恢复块内残留的字符串/注释/OVER 占位符
     return w;
 }
 
@@ -359,6 +419,199 @@ function postProcess(sql) {
     pcStore.forEach((v, i) => { sql = sql.replace('__PC'+i+'__', v); });
     pcStrings.forEach((v, i) => { sql = sql.replace('__PS'+i+'__', v); });
     return sql;
+}
+
+// ======================== CASE WHEN 格式化 ========================
+// formatCaseBlock 返回 { inline: string }（单行）或 { first: string, rest: string[] }（多行）。
+// rest 中的行是相对 "CASE 起始列" 的缩进行（END 相对缩进 0，与 CASE 对齐）。
+
+function formatCaseBlock(caseText, opts) {
+    const IND = ' '.repeat(opts.indentSize || 4);
+    // 1) 内层嵌套 CASE 保护为 __L
+    const { text: t, store: nested } = protectNestedCases(caseText);
+    // 2) 解析分支
+    const { expr, branches, elseVal } = splitCaseBranches(t);
+    const header = expr ? 'CASE ' + expr : 'CASE';
+
+    // 3) 单行判断：无嵌套、无子查询、无行注释（防注释吞后文）、分支 ≤2、总长 ≤80 → 一行
+    const hasNested = nested.length > 0;
+    const hasSubquery = /\(\s*(SELECT|WITH)\b/i.test(caseText);
+    const hasLineComment = /__C\d+__/.test(caseText);   // 行注释必须落到行尾，强制多行
+    const inlineLen = header + ' ' +
+        branches.map(b => 'WHEN ' + b.cond + ' THEN ' + b.val).join(' ') +
+        (elseVal !== null ? ' ELSE ' + (elseVal || 'NULL') : '') + ' END';
+    const inlineLimit = Math.min(80, opts.maxWidth || 80);
+    if (!hasNested && !hasSubquery && !hasLineComment && branches.length <= 2 && inlineLen.length <= inlineLimit) {
+        return { inline: inlineLen };
+    }
+
+    // 4) 多行：先对 cond/val 做子查询展开（__L 由 expandBlockLine 统一恢复）
+    const sub = (s) => s ? formatSubqueryContent(s, opts) : s;
+    const branchInfos = branches.map(b => {
+        const cond = sub(b.cond);
+        const val = sub(b.val);
+        const multiCond = splitAndOr(cond).length > 1;
+        const single = 'WHEN ' + cond + ' THEN ' + val;
+        const singleOK = !multiCond && single.length <= 120 && !val.includes('\n') && !cond.includes('\n');
+        return { cond, val, multiCond, single, singleOK, width: ('WHEN ' + cond).length };
+    });
+
+    const lines = [header];
+    const allSingle = branchInfos.every(x => x.singleOK);
+    if (allSingle) {
+        // 全部分支单行 → THEN 列对齐
+        const condMax = Math.max(...branchInfos.map(x => x.width));
+        for (const b of branchInfos) {
+            const pad = Math.max(condMax - b.width + 1, 1);
+            lines.push(IND + 'WHEN ' + b.cond + ' '.repeat(pad) + 'THEN ' + b.val);
+        }
+    } else {
+        for (const b of branchInfos) {
+            if (b.singleOK) {
+                lines.push(IND + b.single);
+                continue;
+            }
+            if (b.multiCond) {
+                // WHEN 内多条件：AND/OR 与 WHEN 对齐拆行
+                const parts = splitAndOrWithOps(b.cond);
+                lines.push(IND + 'WHEN ' + parts[0].text);
+                for (let k = 1; k < parts.length; k++) lines.push(IND + parts[k].op + ' ' + parts[k].text);
+                if (b.val.includes('\n')) {
+                    lines.push(IND + 'THEN');
+                    lines.push(indentBlock(b.val, IND + IND));
+                } else {
+                    lines.push(IND + 'THEN ' + b.val);
+                }
+                continue;
+            }
+            // THEN 后值太长（可能含子查询多行）→ 换行缩进
+            lines.push(IND + 'WHEN ' + b.cond + ' THEN');
+            lines.push(indentBlock(b.val, IND + IND));
+        }
+    }
+    if (elseVal !== null) {
+        lines.push(IND + 'ELSE ' + sub(elseVal || 'NULL'));
+    }
+    lines.push('END');
+
+    // 5) 展开内层嵌套 CASE（__L）
+    const finalLines = [];
+    for (const l of lines) {
+        finalLines.push(...expandBlockLine(l, nested, /__L(\d+)__/g, opts).split('\n'));
+    }
+    if (finalLines.length === 1) return { inline: finalLines[0] };
+    return { first: finalLines[0], rest: finalLines.slice(1) };
+}
+
+// 保护内层嵌套 CASE：text 以 CASE 开头，把内部嵌套的 CASE...END 保护为 __Ln__
+function protectNestedCases(text) {
+    const store = [];
+    let r = 'CASE', i = 4, caseDepth = 1;
+    while (i < text.length) {
+        const m = text.slice(i).match(/\b(CASE|END)\b/);
+        if (!m) { r += text.slice(i); break; }
+        const kw = m[0].toUpperCase();
+        const idx = i + m.index;
+        if (kw === 'CASE') {
+            // 找到该内层 CASE 的匹配 END
+            const innerStart = idx;
+            let d2 = 1, j2 = idx + 4, end2 = -1;
+            while (j2 < text.length) {
+                const e = text.slice(j2).match(/\b(CASE|END)\b/);
+                if (!e) break;
+                const k2 = e[0].toUpperCase(); const i2 = j2 + e.index;
+                if (k2 === 'CASE') d2++;
+                else { d2--; if (d2 === 0) { end2 = i2; break; } }
+                j2 = i2 + k2.length;
+            }
+            if (end2 !== -1) {
+                r += text.slice(i, innerStart);   // 保留内层 CASE 之前的内容
+                r += '__L' + store.length + '__';
+                store.push(text.slice(innerStart, end2 + 3));
+                i = end2 + 3;
+            } else {
+                r += text.slice(idx, idx + 4);
+                i = idx + 4;
+            }
+            continue;
+        }
+        // END（自身链上的 END）
+        r += text.slice(i, idx + 3);
+        i = idx + 3;
+        caseDepth--;
+        if (caseDepth === 0) break;
+    }
+    return { text: r, store };
+}
+
+// 查找目标关键字（跳过括号内），返回 {kw, index}
+function findKwIn(t, from, re) {
+    let depth = 0;
+    for (let i = from; i < t.length; i++) {
+        const c = t[i];
+        if (c === '(') { depth++; continue; }
+        if (c === ')') { depth = Math.max(0, depth - 1); continue; }
+        if (depth === 0) {
+            const m = t.slice(i).match(re);
+            if (m && m.index === 0) return { kw: m[0].toUpperCase(), index: i };
+        }
+    }
+    return null;
+}
+
+// 解析 CASE 分支（内层 CASE 已保护为 __L）：返回 {expr, branches, elseVal}
+function splitCaseBranches(t) {
+    const firstWhen = findKwIn(t, 4, /\bWHEN\b/);
+    if (!firstWhen) return { expr: '', branches: [], elseVal: null };
+    const expr = t.slice(4, firstWhen.index).trim();
+    const branches = [];
+    let pos = firstWhen.index, elseVal = null;
+    for (;;) {
+        const then = findKwIn(t, pos + 4, /\bTHEN\b/);
+        if (!then) break;
+        const cond = t.slice(pos + 4, then.index).trim();
+        const nxt = findKwIn(t, then.index + 4, /\b(WHEN|ELSE|END)\b/);
+        if (!nxt) break;
+        const val = t.slice(then.index + 4, nxt.index).trim();
+        branches.push({ cond, val });
+        if (nxt.kw === 'WHEN') { pos = nxt.index; continue; }
+        if (nxt.kw === 'ELSE') {
+            const endAt = findKwIn(t, nxt.index + 4, /\bEND\b/);
+            elseVal = endAt ? t.slice(nxt.index + 4, endAt.index).trim() : null;
+            break;
+        }
+        break; // END
+    }
+    return { expr, branches, elseVal };
+}
+
+// 把一行中的占位符展开为 CASE 块；多行时后续行按占位符所在列缩进
+function expandBlockLine(line, store, re, opts) {
+    re.lastIndex = 0;
+    if (!re.test(line)) return line;
+    re.lastIndex = 0;
+    let out = '', last = 0, m;
+    while ((m = re.exec(line)) !== null) {
+        out += line.slice(last, m.index);
+        const block = formatCaseBlock(store[+m[1]], opts);
+        if (block.inline) {
+            out += block.inline;
+        } else {
+            out += block.first;
+            for (const l of block.rest) out += '\n' + ' '.repeat(m.index) + l;
+        }
+        last = m.index + m[0].length;
+    }
+    out += line.slice(last);
+    return out;
+}
+
+// 对最终 SQL 逐行展开 __K 占位符
+function expandAllCases(sql, opts) {
+    if (!sql.includes('__K')) return sql;
+    return sql.split('\n')
+        .map(l => expandBlockLine(l, storeK, /__K(\d+)__/g, opts))
+        .join('\n');
 }
 
 module.exports = { formatSQL };
