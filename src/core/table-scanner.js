@@ -298,7 +298,7 @@ function parseAliasDefinitions(text) {
  * @returns {{ physical: Map, temp: Map, deps: Array }}
  */
 function scanTablesForDocument(document) {
-    return getCached(document, (doc) => scanTables(doc.getText()));
+    return getCached(document, (doc) => scanTables(doc.getText()), 'scanTables');
 }
 
 module.exports = { scanTablesForDocument };

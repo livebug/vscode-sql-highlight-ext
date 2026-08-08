@@ -140,7 +140,7 @@ function detectSQLContext(document, position, textBeforeCursor) {
  * 从文档中提取所有 CTE 名称（WITH name AS (）（按 uri+version 缓存）
  */
 function getCTENames(document) {
-    return getCached(document, computeCTENames);
+    return getCached(document, computeCTENames, 'cteNames');
 }
 
 function computeCTENames(document) {

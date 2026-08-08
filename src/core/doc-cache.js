@@ -18,14 +18,18 @@ const MAX_ENTRIES = 50;
 const cache = new Map();
 
 /**
- * 获取文档解析结果（按 uri + version 缓存）
+ * 获取文档解析结果（按 uri + version + namespace 缓存）
+ *
+ * 注意：同一文档的不同解析结果（别名 / CREATE TABLE / 表扫描 / CTE 等）
+ * 必须使用不同的 namespace，否则会互相覆盖 key，取回错误类型的数据。
  *
  * @param {vscode.TextDocument} document
  * @param {Function} compute - (document) => 解析结果
+ * @param {string} namespace - 缓存命名空间（如 'aliasDefinitions' / 'scanTables'）
  * @returns {*} 解析结果
  */
-function getCached(document, compute) {
-    const key = document.uri.toString();
+function getCached(document, compute, namespace) {
+    const key = `${document.uri.toString()}|${namespace}`;
     const entry = cache.get(key);
     if (entry && entry.version === document.version) {
         return entry.value;

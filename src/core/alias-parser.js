@@ -32,7 +32,7 @@ function cleanText(text) {
  * @returns {Map<string, Object>}
  */
 function parseAliasDefinitions(document) {
-    return getCached(document, computeAliasDefinitions);
+    return getCached(document, computeAliasDefinitions, 'aliasDefinitions');
 }
 
 function computeAliasDefinitions(document) {
@@ -81,7 +81,7 @@ function computeAliasDefinitions(document) {
  * @returns {Map<string, Object>}
  */
 function parseCreateTableDefs(document) {
-    return getCached(document, computeCreateTableDefs);
+    return getCached(document, computeCreateTableDefs, 'createTableDefs');
 }
 
 function computeCreateTableDefs(document) {
