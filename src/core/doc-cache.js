@@ -20,8 +20,13 @@ const cache = new Map();
 /**
  * 获取文档解析结果（按 uri + version + namespace 缓存）
  *
- * 注意：同一文档的不同解析结果（别名 / CREATE TABLE / 表扫描 / CTE 等）
- * 必须使用不同的 namespace，否则会互相覆盖 key，取回错误类型的数据。
+ * 注意：
+ *   1. 同一文档的不同解析结果（别名 / CREATE TABLE / 表扫描 / CTE 等）
+ *      必须使用不同的 namespace，否则会互相覆盖 key，取回错误类型的数据。
+ *   2. 命中时同时校验"文档实例同一"（entry.doc === document）：
+ *      文档关闭后重开是新的实例、version 会重置，仅凭 version 可能命中
+ *      磁盘内容已被外部修改的过期缓存。
+ *   3. 缓存值是共享引用，调用方应只读，不得修改返回的 Map/Range。
  *
  * @param {vscode.TextDocument} document
  * @param {Function} compute - (document) => 解析结果
@@ -31,11 +36,11 @@ const cache = new Map();
 function getCached(document, compute, namespace) {
     const key = `${document.uri.toString()}|${namespace}`;
     const entry = cache.get(key);
-    if (entry && entry.version === document.version) {
+    if (entry && entry.doc === document && entry.version === document.version) {
         return entry.value;
     }
     const value = compute(document);
-    cache.set(key, { version: document.version, value });
+    cache.set(key, { doc: document, version: document.version, value });
 
     // 超出上限时淘汰最早的条目（Map 保持插入顺序）
     if (cache.size > MAX_ENTRIES) {
