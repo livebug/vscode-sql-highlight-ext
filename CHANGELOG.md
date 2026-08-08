@@ -6,7 +6,7 @@
 
 ## 版本历史
 
-### v0.9.4 (未发布)
+### v0.9.4
 - **fix: 子查询块缩进改为相对 `(` 所在列** — 修复嵌套字段（如 `nvl((SELECT ... LIMIT 1), 'xxx') AS ISSUE_NAME`）展开为多行时，子查询内部行与 `)` 落在错误列（固定 4 空格、`)` 在列 0）的问题：
   - `formatSubqueryContent`/`formatInParenContent` 新增 `base`（内容起始列）参数，子查询块缩进 = `base + '('偏移 + indentSize`，`)` 对齐 `(`
   - 所有调用点（SELECT 字段/WHERE/ON/JOIN/SET/CREATE 列/CTE）传入各自真实起始列
