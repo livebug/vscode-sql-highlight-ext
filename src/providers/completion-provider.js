@@ -9,8 +9,9 @@ const vscode = require('vscode');
 const logger = require('../logger');
 const completionData = require('../core/completion-data');
 const { parseAliasDefinitions } = require('../core/alias-parser');
-const { scanTables } = require('../core/table-scanner');
+const { scanTablesForDocument } = require('../core/table-scanner');
 const { loadMetadata } = require('../core/metadata-loader');
+const { getCached } = require('../core/doc-cache');
 
 /**
  * 向后扫描 SQL 文本，检测当前光标所在的补全上下文
@@ -136,9 +137,13 @@ function detectSQLContext(document, position, textBeforeCursor) {
 }
 
 /**
- * 从文档中提取所有 CTE 名称（WITH name AS (）
+ * 从文档中提取所有 CTE 名称（WITH name AS (）（按 uri+version 缓存）
  */
 function getCTENames(document) {
+    return getCached(document, computeCTENames);
+}
+
+function computeCTENames(document) {
     const text = document.getText();
     let clean = text;
     clean = clean.replace(/'([^'\n]|'')*'/g, m => ' '.repeat(m.length));
@@ -158,11 +163,10 @@ function getCTENames(document) {
 }
 
 /**
- * 从文档的 CREATE TABLE 语句中提取临时表及其字段
+ * 从文档的 CREATE TABLE 语句中提取临时表及其字段（复用版本缓存）
  */
 function getTempTableColumns(document) {
-    const text = document.getText();
-    const result = scanTables(text);
+    const result = scanTablesForDocument(document);
     return result.temp;
 }
 

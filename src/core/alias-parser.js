@@ -6,6 +6,7 @@
 'use strict';
 
 const vscode = require('vscode');
+const { getCached } = require('./doc-cache');
 
 // ---- 关键字集合（用于过滤） ----
 const KEYWORDS = require('./keywords');
@@ -23,7 +24,7 @@ function cleanText(text) {
 }
 
 /**
- * 解析文档中所有表别名定义
+ * 解析文档中所有表别名定义（按 uri+version 缓存）
  * 返回 Map: 别名(小写) → { tableName, tableRange, aliasRange, hasAS }
  * 支持: FROM table_name alias, JOIN table_name AS alias
  *
@@ -31,6 +32,10 @@ function cleanText(text) {
  * @returns {Map<string, Object>}
  */
 function parseAliasDefinitions(document) {
+    return getCached(document, computeAliasDefinitions);
+}
+
+function computeAliasDefinitions(document) {
     const text = document.getText();
     const aliasMap = new Map();
     const clean = cleanText(text);
@@ -69,13 +74,17 @@ function parseAliasDefinitions(document) {
 }
 
 /**
- * 解析文档中所有 CREATE TABLE / CREATE TEMP TABLE / CREATE TEMPORARY TABLE 定义
+ * 解析文档中所有 CREATE TABLE / CREATE TEMP TABLE / CREATE TEMPORARY TABLE 定义（按 uri+version 缓存）
  * 返回 Map: 表名(小写) → { tableName, fullCreateRange, tableNameRange, createText }
  *
  * @param {vscode.TextDocument} document
  * @returns {Map<string, Object>}
  */
 function parseCreateTableDefs(document) {
+    return getCached(document, computeCreateTableDefs);
+}
+
+function computeCreateTableDefs(document) {
     const text = document.getText();
     const defs = new Map();
     const clean = cleanText(text);

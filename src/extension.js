@@ -16,7 +16,7 @@ const { provideAliasDefinition, provideTableDefinition } = require('./providers/
 const { doProvideCompletionItems } = require('./providers/completion-provider');
 const { provideSQLDocumentSymbols } = require('./providers/document-symbols');
 
-const { scanTables } = require('./core/table-scanner');
+const { scanTablesForDocument } = require('./core/table-scanner');
 const { loadTableColumns } = require('./core/metadata-loader');
 const { DepsTreeProvider } = require('./views/deps-view-provider');
 
@@ -83,8 +83,8 @@ function activate(context) {
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
         if (!workspaceFolder) { depsProvider.clear(); return; }
 
-        const text = editor.document.getText();
-        const scanResult = scanTables(text);
+        // 复用文档版本缓存，文档未编辑时避免重复全量扫描
+        const scanResult = scanTablesForDocument(editor.document);
         depsProvider.refresh(scanResult, workspaceFolder.uri.fsPath, function(tableKey) {
             // 优先查临时表
             if (scanResult.temp.has(tableKey)) {
@@ -170,6 +170,7 @@ function activate(context) {
 function deactivate() {
     logger.info('SQL Dialect Highlight 扩展停用');
     require('./core/metadata-loader').clearCache();
+    require('./core/doc-cache').clear();
 }
 
 module.exports = { activate, deactivate };

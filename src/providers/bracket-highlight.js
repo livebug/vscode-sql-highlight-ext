@@ -21,36 +21,38 @@ function findMatchingBracket(doc, range, word) {
 
     // ---- CASE/BEGIN ↔ END 配对 ----
     if (isOpen) {
+        // 向后扫描找匹配的 END（只扫光标之后的部分，避免全文档扫描）
         let depth = 1;
-        let pos = doc.offsetAt(range.end);
+        const startPos = doc.offsetAt(range.end);
+        const tail = text.slice(startPos);
         const re = /\b(CASE|BEGIN|END)\b/gi;
         let m;
-        while ((m = re.exec(text)) !== null) {
-            if (m.index < pos) continue;
+        while ((m = re.exec(tail)) !== null) {
             const w = m[0].toUpperCase();
             if (w === 'CASE' || w === 'BEGIN') depth++;
             else if (w === 'END') {
                 depth--;
                 if (depth === 0) {
+                    const idx = startPos + m.index;
                     return new vscode.Range(
-                        doc.positionAt(m.index),
-                        doc.positionAt(m.index + 3)
+                        doc.positionAt(idx),
+                        doc.positionAt(idx + 3)
                     );
                 }
             }
         }
     } else if (isClose) {
-        // END → 向前找匹配的 CASE 或 BEGIN
+        // END → 向前找匹配的 CASE 或 BEGIN（只扫光标之前的部分）
         let depth = 1;
-        let pos = doc.offsetAt(range.start);
+        const endPos = doc.offsetAt(range.start);
+        const head = text.slice(0, endPos);
         const re = /\b(CASE|BEGIN|END)\b/gi;
         const matches = [];
         let m;
-        while ((m = re.exec(text)) !== null) {
+        while ((m = re.exec(head)) !== null) {
             matches.push({ word: m[0].toUpperCase(), index: m.index });
         }
         for (let i = matches.length - 1; i >= 0; i--) {
-            if (matches[i].index >= pos) continue;
             const w = matches[i].word;
             if (w === 'END') depth++;
             else if (w === 'CASE' || w === 'BEGIN') {
@@ -69,39 +71,40 @@ function findMatchingBracket(doc, range, word) {
 }
 
 /**
- * WHEN ↔ THEN 配对查找
+ * WHEN ↔ THEN 配对查找（只扫描光标向一侧的文本）
  */
 function findWhenThenMatch(doc, range, word, text) {
     if (word === 'WHEN') {
         // 向后扫描找 THEN，跳过嵌套的 CASE...END 块
         let caseDepth = 0;
-        let pos = doc.offsetAt(range.end);
+        const startPos = doc.offsetAt(range.end);
+        const tail = text.slice(startPos);
         const re = /\b(CASE|WHEN|THEN|ELSE|END)\b/gi;
         let m;
-        while ((m = re.exec(text)) !== null) {
-            if (m.index < pos) continue;
+        while ((m = re.exec(tail)) !== null) {
             const w = m[0].toUpperCase();
             if (w === 'CASE') { caseDepth++; }
             else if (w === 'END') { caseDepth--; }
             else if (w === 'THEN' && caseDepth === 0) {
+                const idx = startPos + m.index;
                 return new vscode.Range(
-                    doc.positionAt(m.index),
-                    doc.positionAt(m.index + 4)
+                    doc.positionAt(idx),
+                    doc.positionAt(idx + 4)
                 );
             }
         }
     } else if (word === 'THEN') {
         // 向前扫描找 WHEN
         let caseDepth = 0;
-        let pos = doc.offsetAt(range.start);
+        const endPos = doc.offsetAt(range.start);
+        const head = text.slice(0, endPos);
         const re = /\b(CASE|WHEN|THEN|ELSE|END)\b/gi;
         const matches = [];
         let m;
-        while ((m = re.exec(text)) !== null) {
+        while ((m = re.exec(head)) !== null) {
             matches.push({ word: m[0].toUpperCase(), index: m.index });
         }
         for (let i = matches.length - 1; i >= 0; i--) {
-            if (matches[i].index >= pos) continue;
             const w = matches[i].word;
             if (w === 'END') { caseDepth++; }
             else if (w === 'CASE') { caseDepth--; }

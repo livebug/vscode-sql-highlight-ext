@@ -11,6 +11,7 @@
 'use strict';
 
 const logger = require('../logger');
+const { getCached } = require('./doc-cache');
 
 // ---- 关键字集合（用于过滤别名） ----
 const KEYWORDS = require('./keywords');
@@ -289,4 +290,15 @@ function parseAliasDefinitions(text) {
     return aliasMap;
 }
 
-module.exports = { scanTables, extractFromTables, inferColumnsFromSelect, extractColumnsFromDef };
+/**
+ * 扫描文档（按 uri+version 缓存）
+ * 供 hover / 补全 / 依赖视图等高频路径复用，文档未编辑时避免重复全量扫描。
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {{ physical: Map, temp: Map, deps: Array }}
+ */
+function scanTablesForDocument(document) {
+    return getCached(document, (doc) => scanTables(doc.getText()));
+}
+
+module.exports = { scanTables, scanTablesForDocument, extractFromTables, inferColumnsFromSelect, extractColumnsFromDef };
