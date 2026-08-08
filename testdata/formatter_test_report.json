@@ -2,7 +2,7 @@
   {
     "file": "semantic-test.sql",
     "filePath": "testdata/sql/semantic-test.sql",
-    "timestamp": "2026-08-08T09:03:47.075Z",
+    "timestamp": "2026-08-08T23:26:39.174Z",
     "checks": [
       {
         "name": "关键字计数",
@@ -48,7 +48,7 @@
   {
     "file": "subquery_test.sql",
     "filePath": "testdata/sql/subquery_test.sql",
-    "timestamp": "2026-08-08T09:03:47.085Z",
+    "timestamp": "2026-08-08T23:26:39.186Z",
     "checks": [
       {
         "name": "关键字计数",
@@ -94,7 +94,7 @@
   {
     "file": "test.sql",
     "filePath": "testdata/sql/test.sql",
-    "timestamp": "2026-08-08T09:03:47.087Z",
+    "timestamp": "2026-08-08T23:26:39.190Z",
     "checks": [
       {
         "name": "关键字计数",

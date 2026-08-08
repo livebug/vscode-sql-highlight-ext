@@ -1,14 +1,14 @@
 # SQL Formatter 全面场景测试报告
 
-> 生成时间: 2026-08-08 09:03:46
-> 覆盖类别: 15 类 · 76 个场景
+> 生成时间: 2026-08-08 23:26:39
+> 覆盖类别: 15 类 · 77 个场景
 
 ## 汇总
 
 | 指标 | 数值 |
 |---|---|
-| 场景总数 | 76 |
-| ✅ 通过 | 76 |
+| 场景总数 | 77 |
+| ✅ 通过 | 77 |
 | ❌ 失败 | 0 |
 | 通过率 | 100.0% |
 
@@ -152,7 +152,7 @@
 | M01 | 多条语句分号分隔 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | M02 | BEGIN...END 块 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### 边界 （8/8）
+### 边界 （9/9）
 
 | 编号 | 场景 | 关键字 | 字符串 | 语句数 | 无泄漏 | 幂等 | 注释 | 括号 | 结果 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -164,6 +164,7 @@
 | E06 | AS 在表达式内（CAST AS STRING） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E07 | 含子查询字段 AS（不参与对齐） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E08 | 行注释含字符串/变量 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E09 | 嵌套 nvl 长子查询字段缩进 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## 输入 / 输出示例
 
@@ -567,12 +568,12 @@ SELECT * FROM (SELECT cust_id, SUM(amount) AS total FROM trade GROUP BY cust_id)
 ```sql
 SELECT *
 FROM (
-    SELECT
-        cust_id
-      , SUM(amount) AS total
-    FROM trade
-    GROUP BY cust_id
-) sub
+         SELECT
+             cust_id
+           , SUM(amount) AS total
+         FROM trade
+         GROUP BY cust_id
+     ) sub
 WHERE total > 1000;
 ```
 
@@ -592,8 +593,8 @@ SELECT * FROM t WHERE id IN (SELECT id FROM banned WHERE reason = 'fraud');
 ```sql
 SELECT * FROM t
 WHERE id IN (
-    SELECT id FROM banned WHERE reason = 'fraud'
-);
+                SELECT id FROM banned WHERE reason = 'fraud'
+            );
 ```
 
 </details>
@@ -612,10 +613,10 @@ SELECT * FROM orders o WHERE EXISTS (SELECT 1 FROM items i WHERE i.order_id = o.
 ```sql
 SELECT * FROM orders o
 WHERE EXISTS (
-    SELECT 1 FROM items i
-    WHERE i.order_id = o.id
-        AND i.qty > 5
-);
+                 SELECT 1 FROM items i
+                 WHERE i.order_id = o.id
+                     AND i.qty > 5
+             );
 ```
 
 </details>
@@ -634,13 +635,13 @@ SELECT * FROM (SELECT a.id, (SELECT MAX(b.score) FROM scores b WHERE b.uid = a.i
 ```sql
 SELECT *
 FROM (
-    SELECT
-        a.id
-      , (
-        SELECT MAX(b.score) FROM scores b WHERE b.uid = a.id
-    ) AS top
-    FROM users a
-) x
+         SELECT
+             a.id
+           , (
+                 SELECT MAX(b.score) FROM scores b WHERE b.uid = a.id
+             ) AS top
+         FROM users a
+     ) x
 WHERE x.top > 90;
 ```
 
@@ -661,8 +662,8 @@ SELECT id, (SELECT name FROM users WHERE users.id = orders.uid) AS uname FROM or
 SELECT
     id
   , (
-    SELECT name FROM users WHERE users.id = orders.uid
-) AS uname
+        SELECT name FROM users WHERE users.id = orders.uid
+    ) AS uname
 FROM orders;
 ```
 
@@ -1235,11 +1236,11 @@ WITH cte AS (SELECT id, name FROM users WHERE status = 1) SELECT * FROM cte;
 **输出:**
 ```sql
 WITH cte AS (
-    SELECT
-        id
-      , name
-    FROM users WHERE status = 1
-)
+           SELECT
+               id
+             , name
+           FROM users WHERE status = 1
+       )
 SELECT * FROM cte;
 ```
 
@@ -1259,11 +1260,11 @@ WITH a AS (SELECT id FROM t1), b AS (SELECT id FROM t2) SELECT a.id FROM a JOIN 
 ```sql
 WITH
     a AS (
-        SELECT id FROM t1
-    )
+             SELECT id FROM t1
+         )
   , b AS (
-        SELECT id FROM t2
-    )
+             SELECT id FROM t2
+         )
 SELECT a.id FROM a
     JOIN b
       ON a.id = b.id;
@@ -1284,10 +1285,10 @@ WITH RECURSIVE cte AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM cte WHERE n < 1
 **输出:**
 ```sql
 WITH RECURSIVE cte AS (
-    SELECT 1 AS n
-    UNION ALL
-    SELECT n + 1 FROM cte WHERE n < 10
-)
+                     SELECT 1 AS n
+                     UNION ALL
+                     SELECT n + 1 FROM cte WHERE n < 10
+                 )
 SELECT * FROM cte;
 ```
 
@@ -1805,8 +1806,8 @@ SELECT nvl((SELECT max(v) FROM t2 WHERE t2.id = t.id), 0) AS a, b AS bb FROM t;
 ```sql
 SELECT
     nvl((
-    SELECT max(v) FROM t2 WHERE t2.id = t.id
-), 0) AS a
+            SELECT max(v) FROM t2 WHERE t2.id = t.id
+        ), 0) AS a
   , b AS bb
 FROM t;
 ```
@@ -1830,6 +1831,32 @@ SELECT 1;
 
 SELECT a -- 注释 'xyz' ${V_OG}
 FROM t
+```
+
+</details>
+
+### E09 — 嵌套 nvl 长子查询字段缩进 
+
+<details>
+<summary>查看</summary>
+
+**输入:**
+```sql
+SELECT id, nvl((SELECT cfg.item_value FROM mod.SS_CONFIG cfg WHERE cfg.p_og='${V_OG}' AND cfg.item_id='ISNT_NAME' AND a.p_og=cfg.p_og LIMIT 1), 'XXXXXXXXXXXX') AS ISSUE_NAME FROM ods.c_PDPDTPDT_sp a;
+```
+
+**输出:**
+```sql
+SELECT
+    id
+  , nvl((
+            SELECT cfg.item_value FROM mod.SS_CONFIG cfg
+            WHERE cfg.p_og='${V_OG}'
+                AND cfg.item_id='ISNT_NAME'
+                AND a.p_og=cfg.p_og
+            LIMIT 1
+        ), 'XXXXXXXXXXXX') AS ISSUE_NAME
+FROM ods.c_PDPDTPDT_sp a;
 ```
 
 </details>
