@@ -8,26 +8,7 @@
 const vscode = require('vscode');
 
 // ---- 关键字集合（用于过滤） ----
-const KEYWORDS = new Set([
-    'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'EXISTS',
-    'BETWEEN', 'LIKE', 'RLIKE', 'REGEXP', 'AS', 'ON', 'JOIN',
-    'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'OUTER',
-    'SEMI', 'ANTI', 'UNION', 'ALL', 'INTERSECT', 'EXCEPT', 'MINUS',
-    'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
-    'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'REPLACE', 'MERGE',
-    'GRANT', 'REVOKE', 'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET',
-    'FETCH', 'FOR', 'ASC', 'DESC', 'CASE', 'WHEN', 'THEN', 'ELSE',
-    'END', 'NULL', 'TRUE', 'FALSE', 'DISTINCT', 'ANY', 'SOME',
-    'WITH', 'RECURSIVE', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE',
-    'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'LATERAL',
-    'TABLE', 'VIEW', 'SCHEMA', 'DATABASE', 'TEMP', 'TEMPORARY',
-    'BEGIN', 'CALL', 'COMMIT', 'ROLLBACK', 'SAVEPOINT',
-    'DEFAULT', 'CASCADE', 'RESTRICT', 'PURGE', 'IF', 'COMMENT',
-    'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'INDEX', 'CONSTRAINT',
-    'CHECK', 'UNIQUE', 'ADD', 'COLUMN', 'RENAME', 'TO',
-    'IS', 'NOT', 'NULLS', 'FIRST', 'LAST', 'HAVING',
-    'ON', 'USING', 'NATURAL', 'INNER', 'CROSS', 'OUTER',
-]);
+const KEYWORDS = require('./keywords');
 
 /**
  * 保护注释、字符串、变量，防止误匹配

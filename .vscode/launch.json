@@ -12,18 +12,6 @@
                 "${workspaceFolder}/**/*.js"
             ],
             "preLaunchTask": ""
-        },
-        {
-            "name": "Run Extension (Tests)",
-            "type": "extensionHost",
-            "request": "launch",
-            "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}",
-                "--extensionTestsPath=${workspaceFolder}/test/suite/index"
-            ],
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
         }
     ]
 }

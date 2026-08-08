@@ -181,6 +181,8 @@ let _cache = null;         // 表名索引缓存（tablesMap）
 let _tableCache = null;    // LRU 字段缓存
 let _mtimeCache = {};       // CSV 文件 mtime
 let _metadataDir = null;   // 当前元数据目录
+let _allColumnsCache = null; // 全量字段索引缓存（Map<tableKey, columns[]>）
+let _allColumnsMtime = 0;    // 全量字段索引的 CSV mtime
 let _config = {
     maxCacheSize: 100,      // LRU 最大缓存表数
 };
@@ -332,6 +334,46 @@ function loadTableColumnsBatch(workspaceFolder, tableNames) {
 }
 
 /**
+ * 全量加载所有表的字段索引（一次性读取 columns.csv，mtime 缓存）
+ *
+ * 供"全局字段补全 / alias. 字段补全"使用：返回 Map<tableKey, columns[]>
+ * 其中每条字段为紧凑数组 [colName, dataType, nullable(0/1), default, description]
+ *
+ * @param {string} workspaceFolder
+ * @returns {Map<string, Array[]>}
+ */
+function loadAllColumns(workspaceFolder) {
+    const metaDir = findMetadataDir(workspaceFolder);
+    if (!metaDir) return new Map();
+
+    const csvPath = path.join(metaDir, 'columns.csv');
+    let mtime = 0;
+    try { mtime = fs.statSync(csvPath).mtimeMs; } catch { return new Map(); }
+
+    if (_allColumnsCache && _allColumnsMtime === mtime) return _allColumnsCache;
+
+    const { rows } = readCSV(csvPath);
+    const map = new Map();
+    for (const row of rows) {
+        const tblKey = (row.table_name || '').toLowerCase();
+        if (!tblKey) continue;
+        if (!map.has(tblKey)) map.set(tblKey, []);
+        map.get(tblKey).push([
+            row.column_name || '',                                    // 0: column_name
+            row.data_type || 'VARCHAR',                               // 1: data_type
+            (row.nullable || 'YES').toUpperCase() === 'YES' ? 1 : 0, // 2: nullable
+            row.default_value || '',                                  // 3: default_value
+            row.description || '',                                    // 4: description
+        ]);
+    }
+
+    _allColumnsCache = map;
+    _allColumnsMtime = mtime;
+    logger.debug(`[元数据] 加载全量字段索引: ${map.size} 张表`);
+    return map;
+}
+
+/**
  * 兼容旧 API: 全量加载（配合 table-scanner 使用）
  * 内部实际上只加载索引 + 按需加载字段
  */
@@ -339,7 +381,7 @@ function loadMetadata(workspaceFolder) {
     const tables = loadTableIndex(workspaceFolder);
     return {
         tables: tables,
-        columns: new Map(),  // columns 不再全量预加载
+        columns: loadAllColumns(workspaceFolder),  // 全量字段索引（mtime 缓存）
         getColumnsForTable: function(tableName) {
             return loadTableColumns(workspaceFolder, tableName);
         }
@@ -356,6 +398,8 @@ function clearCache() {
     _mtimeCache = {};
     _metadataDirCache = null;
     _metadataDirWorkspace = null;
+    _allColumnsCache = null;
+    _allColumnsMtime = 0;
     logger.info('[元数据] 缓存已清除');
 }
 
@@ -374,6 +418,7 @@ module.exports = {
     loadTableIndex,        // 只加载表名索引
     loadTableColumns,      // 按需加载字段
     loadTableColumnsBatch, // 批量加载字段
+    loadAllColumns,        // 全量字段索引
     clearCache,
     configure,
     getCacheStats,

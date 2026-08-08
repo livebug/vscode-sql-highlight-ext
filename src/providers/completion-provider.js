@@ -309,16 +309,19 @@ function doProvideCompletionItems(document, position) {
                 const columns = metadata.columns.get(resolvedName);
                 if (columns && columns.length > 0) {
                     for (const col of columns) {
-                        if (currentWord && !col.column_name.toLowerCase().startsWith(currentWord.toLowerCase())) continue;
-                        const item = new vscode.CompletionItem(col.column_name, vscode.CompletionItemKind.Field);
-                        item.detail = `${col.data_type}${col.nullable ? '' : ' NOT NULL'}${col.default_value ? ' DEFAULT ' + col.default_value : ''}`;
+                        const colName = col[0], dataType = col[1], nullable = !!col[2],
+                              defaultVal = col[3], desc = col[4];
+                        if (!colName) continue;
+                        if (currentWord && !colName.toLowerCase().startsWith(currentWord.toLowerCase())) continue;
+                        const item = new vscode.CompletionItem(colName, vscode.CompletionItemKind.Field);
+                        item.detail = `${dataType}${nullable ? '' : ' NOT NULL'}${defaultVal ? ' DEFAULT ' + defaultVal : ''}`;
                         item.documentation = new vscode.MarkdownString(
-                            `**${col.table_name}.${col.column_name}**  \n` +
-                            `类型: \`${col.data_type}\`${col.nullable ? ' 可空' : ' 不可空'}  \n` +
-                            `${col.default_value ? '默认值: \`' + col.default_value + '\`  \n' : ''}` +
-                            `${col.description || ''}`
+                            `**${resolvedName}.${colName}**  \n` +
+                            `类型: \`${dataType}\`${nullable ? ' 可空' : ' 不可空'}  \n` +
+                            `${defaultVal ? '默认值: \`' + defaultVal + '\`  \n' : ''}` +
+                            `${desc || ''}`
                         );
-                        item.sortText = '0' + col.column_name;
+                        item.sortText = '0' + colName;
                         items.push(item);
                     }
                 }
@@ -342,17 +345,19 @@ function doProvideCompletionItems(document, position) {
                 for (const [tableKey, cols] of metadata.columns) {
                     if (!cols || cols.length === 0) continue;
                     for (const col of cols) {
-                        if (seen.has(col.column_name)) continue;
-                        if (currentWord && !col.column_name.toLowerCase().startsWith(currentWord.toLowerCase())) continue;
-                        seen.add(col.column_name);
-                        const item = new vscode.CompletionItem(col.column_name, vscode.CompletionItemKind.Field);
-                        item.detail = `${col.data_type} · ${col.table_name}`;
+                        const colName = col[0], dataType = col[1], nullable = !!col[2], desc = col[4];
+                        if (!colName) continue;
+                        if (seen.has(colName)) continue;
+                        if (currentWord && !colName.toLowerCase().startsWith(currentWord.toLowerCase())) continue;
+                        seen.add(colName);
+                        const item = new vscode.CompletionItem(colName, vscode.CompletionItemKind.Field);
+                        item.detail = `${dataType} · ${tableKey}`;
                         item.documentation = new vscode.MarkdownString(
-                            `**${col.table_name}.${col.column_name}**  \n` +
-                            `类型: \`${col.data_type}\`${col.nullable ? ' 可空' : ' 不可空'}  \n` +
-                            `${col.description || ''}`
+                            `**${tableKey}.${colName}**  \n` +
+                            `类型: \`${dataType}\`${nullable ? ' 可空' : ' 不可空'}  \n` +
+                            `${desc || ''}`
                         );
-                        item.sortText = '2' + col.column_name;
+                        item.sortText = '2' + colName;
                         items.push(item);
                     }
                 }

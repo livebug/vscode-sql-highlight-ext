@@ -51,19 +51,7 @@ function protectOver(sql) {
 }
 
 // ======================== 关键字 ========================
-const KEYWORDS = new Set([
-    'SELECT','FROM','WHERE','AND','OR','NOT','IN','EXISTS','BETWEEN','LIKE','RLIKE','REGEXP','IS','NULL','TRUE','FALSE',
-    'AS','ON','JOIN','INNER','LEFT','RIGHT','FULL','CROSS','NATURAL','OUTER','SEMI','ANTI','UNION','ALL','INTERSECT','EXCEPT','MINUS',
-    'INSERT','INTO','VALUES','UPDATE','SET','DELETE','CREATE','ALTER','DROP','TRUNCATE','REPLACE','MERGE',
-    'GRANT','REVOKE','ORDER','GROUP','HAVING','LIMIT','OFFSET','FETCH','FOR','ASC','DESC','NULLS','FIRST','LAST','BY',
-    'CASE','WHEN','THEN','ELSE','END','DISTINCT','WITH','RECURSIVE','WINDOW','OVER','PARTITION',
-    'ROWS','RANGE','UNBOUNDED','PRECEDING','FOLLOWING','CURRENT','ROW','LATERAL','VIEW','TABLE','SCHEMA','DATABASE',
-    'TEMP','TEMPORARY','IF','EXISTS','BEGIN','CALL','COMMIT','ROLLBACK',
-    'PRIMARY','KEY','FOREIGN','REFERENCES','INDEX','CONSTRAINT','CHECK','UNIQUE','ADD','COLUMN','DEFAULT','CASCADE','RESTRICT',
-    'EXPLODE','POSEXPLODE','INLINE','STACK','PARTITIONED','CLUSTERED','DISTRIBUTE','SORT','BUCKET','BUCKETS',
-    'STORED','FORMAT','SERDE','TBLPROPERTIES','LOCATION','OVERWRITE','PURGE','REFRESH','COMPACT','TRANSACTIONAL',
-    'MSCK','REPAIR','INVALIDATE','METADATA','COMPUTE','STATISTICS','BROADCAST','MAPJOIN','STREAMTABLE',
-]);
+const KEYWORDS = require('./keywords');
 
 function uppercase(sql) {
     return sql.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (m) => {
@@ -83,8 +71,8 @@ function formatTop(sql, opts) {
     if (segs.length === 0) return sql;
     const parts = segs.map(s => formatSegment(s, opts)).filter(Boolean);
 
-    // 统一规则合并：连续的单行、非缩进、非 UNION、非注释段 → 合并到 ≤150 字符
-    const MERGE_LIMIT = 150;
+    // 统一规则合并：连续的单行、非缩进、非 UNION、非注释段 → 合并到 ≤ maxWidth 字符
+    const mergeLimit = opts.maxWidth || 150;
     const lines = [];
     let cur = '';
 
@@ -101,7 +89,7 @@ function formatTop(sql, opts) {
         }
 
         const candidate = cur ? cur + ' ' + part : part;
-        if (candidate.length <= MERGE_LIMIT) {
+        if (candidate.length <= mergeLimit) {
             cur = candidate;
         } else {
             if (cur) lines.push(cur);
@@ -180,33 +168,44 @@ function formatCommaList(kw, content, opts) {
 
     const hasComment = items.some(s => /^__C\d+__$/.test(s));
     const isSelect = kw === 'SELECT';
+    // 短列表单行阈值：默认 ≤80，但受 maxWidth 上限约束
+    const singleLineLimit = Math.min(80, opts.maxWidth || 80);
 
     // 单行判断：
     //   SELECT: 仅 1 个字段且无注释 → 可单行；否则强制多行
-    //   ORDER BY / GROUP BY: ≤3 个字段且总长 ≤80 → 单行
+    //   ORDER BY / GROUP BY: ≤3 个字段且总长 ≤singleLineLimit → 单行
     if (!hasComment) {
         if (!isSelect) {
             const singleLine = kw + ' ' + items.join(', ');
-            if (items.length <= 3 && singleLine.length <= 80) return singleLine;
+            if (items.length <= 3 && singleLine.length <= singleLineLimit) return singleLine;
         } else if (items.length <= 1) {
             return kw + ' ' + items.join(', ');
         }
     }
 
-    // 逗号优先拆分
+    // 逗号拆分（commaFirst=true 逗号在行首；false 逗号在行尾）
     const INDENT = ' '.repeat(opts.indentSize);
     const lines = [kw];
     let firstField = true;
     for (const item of items) {
         if (/^__C\d+__$/.test(item)) {
-            // 纯注释行：不加逗号前缀，独立换行
+            // 纯注释行：独立换行
             lines.push(item);
             firstField = true; // 注释后下一个字段用一级缩进
         } else {
             // 递归展开字段中的子查询
             const formatted = formatSubqueryContent(item, opts);
-            const prefix = firstField ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
-            lines.push(prefix + formatted);
+            if (opts.commaFirst) {
+                const prefix = firstField ? INDENT : ' '.repeat(Math.max(0, opts.indentSize - 2)) + ', ';
+                lines.push(prefix + formatted);
+            } else {
+                // 逗号在行尾：给上一行末尾补逗号（字段行之间）
+                if (!firstField) {
+                    const lastIdx = lines.length - 1;
+                    if (!/,\s*$/.test(lines[lastIdx])) lines[lastIdx] += ',';
+                }
+                lines.push(INDENT + formatted);
+            }
             firstField = false;
         }
     }
@@ -214,6 +213,10 @@ function formatCommaList(kw, content, opts) {
 }
 
 function formatAndList(kw, content, andIndent, opts) {
+    // andAlign=false: 不强制将 AND/OR 条件拆成多行，保持内联
+    if (!opts.andAlign) {
+        return kw + ' ' + formatSubqueryContent(content, opts);
+    }
     const parts = splitAndOr(content).map(s=>s.trim()).filter(Boolean);
     if (parts.length<=1) return kw + ' ' + formatSubqueryContent(content, opts);
     // 短行捷径：仅当内容本身就短（≤30）且无换行时合并单行

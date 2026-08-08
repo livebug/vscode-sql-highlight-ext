@@ -439,10 +439,13 @@ if (require.main === module) {
     }
 
     let reports;
-    if (cliOpts.dir) {
-        reports = runner.runDirectory(cliOpts.path);
+    const singlePath = cliOpts.path;
+    // 目录自动识别：即使没传 --dir，也能正确处理目录（避免把目录当文件读而崩溃）
+    let isDir = false;
+    try { isDir = fs.statSync(singlePath).isDirectory(); } catch { /* 路径不存在等 */ }
+    if (cliOpts.dir || isDir) {
+        reports = runner.runDirectory(singlePath);
     } else {
-        const singlePath = cliOpts.path;
         if (cliOpts.formatOnly) {
             const sql = fs.readFileSync(singlePath, 'utf8');
             const formatted = runner.formatter(sql);

@@ -7,25 +7,7 @@ const vscode = require('vscode');
 const logger = require('../logger');
 
 // 关键字集合（用于跳过）
-const KEYWORDS = new Set([
-    'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'EXISTS',
-    'BETWEEN', 'LIKE', 'RLIKE', 'REGEXP', 'AS', 'ON', 'JOIN',
-    'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'OUTER',
-    'SEMI', 'ANTI', 'UNION', 'INTERSECT', 'EXCEPT', 'MINUS',
-    'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
-    'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'REPLACE', 'MERGE',
-    'GRANT', 'REVOKE', 'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET',
-    'FETCH', 'FOR', 'ASC', 'DESC', 'CASE', 'WHEN', 'THEN', 'ELSE',
-    'END', 'NULL', 'TRUE', 'FALSE', 'DISTINCT', 'ALL', 'ANY', 'SOME',
-    'WITH', 'RECURSIVE', 'WINDOW', 'OVER', 'PARTITION', 'ROWS', 'RANGE',
-    'UNBOUNDED', 'PRECEDING', 'FOLLOWING', 'CURRENT', 'ROW', 'LATERAL',
-    'TABLE', 'VIEW', 'SCHEMA', 'DATABASE', 'TEMP', 'TEMPORARY',
-    'BEGIN', 'CALL', 'COMMIT', 'ROLLBACK', 'SAVEPOINT',
-    'DEFAULT', 'CASCADE', 'RESTRICT', 'PURGE', 'IF', 'COMMENT',
-    'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'INDEX', 'CONSTRAINT',
-    'CHECK', 'UNIQUE', 'ADD', 'COLUMN', 'RENAME', 'TO',
-    'IS', 'NOT', 'NULLS', 'FIRST', 'LAST',
-]);
+const KEYWORDS = require('../core/keywords');
 
 /**
  * 语义 token 类型定义
