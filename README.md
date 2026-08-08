@@ -57,8 +57,7 @@
 │   └── views/
 │       └── deps-view-provider.js       # 侧面板表依赖树视图
 ├── test/
-│   ├── agent.js                        # 测试运行器
-│   ├── semantic_diff.js                # 语义差异测试
+│   ├── agent.js                        # 测试运行器（语义对比 + 结构问题检测）
 │   └── boundary_edge_cases_report.md   # 边界测试报告
 └── testdata/
     └── sql/                            # 测试 SQL 文件

@@ -301,4 +301,4 @@ function scanTablesForDocument(document) {
     return getCached(document, (doc) => scanTables(doc.getText()));
 }
 
-module.exports = { scanTables, scanTablesForDocument, extractFromTables, inferColumnsFromSelect, extractColumnsFromDef };
+module.exports = { scanTablesForDocument };

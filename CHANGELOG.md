@@ -6,6 +6,13 @@
 
 ## 版本历史
 
+### v0.9.2 (2026-08)
+- **refactor: 断舍离与精简** — 摘除 4 个模块的 16 个死导出（table-scanner / metadata-loader / completion-data / format-provider），收敛公共 API
+- **perf: findKwIn O(n²)→O(n)** — 全局正则迭代 + 光标累积括号深度，优化大 CASE 解析
+- **refactor: splitAndOr 复用 splitAndOrWithOps** — 消除 ~20 行重复扫描逻辑，行为永不漂移
+- **chore: 删除 test/semantic_diff.js（477 行）** — 功能已并入 agent.js，并将唯一独有的"行内注释断裂"检查移植进 agent.js
+- 测试全部通过（语义对比 + 结构问题检测，含新增"行内注释断裂"检查）
+
 ### v0.9.1 (2026-08)
 - **新增 CASE WHEN 格式化** — 短 CASE 保持单行；长 CASE 时 `CASE`/`END` 列对齐、`WHEN cond THEN val` 短则一行长则 THEN 列对齐、WHEN 内多条件按 AND/OR 对齐拆行、支持简单 CASE（`CASE expr`）与嵌套 CASE 递归
 - **修复 CASE 内行注释吞后文** — `WHEN ... THEN 'x' -- 注释` 场景强制多行，确保 `-- 注释` 落在行尾不再吞掉后续 `WHEN/ELSE/END`

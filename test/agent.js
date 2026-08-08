@@ -159,6 +159,21 @@ class SemanticAnalyzer {
         return issues;
     }
 
+    /** 检测逗号+行内注释可能中断字段列表结构 */
+    detectInlineCommentBreak(text) {
+        const issues = [];
+        const lines = text.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            if (/^\s*,\s*--/.test(lines[i]) && i + 1 < lines.length) {
+                const next = lines[i + 1];
+                if (!/^\s*(SELECT|FROM|WHERE|AND|OR|JOIN|ON|ORDER|GROUP|CASE|WHEN|ELSE|END)/i.test(next.trim())) {
+                    issues.push({ line: i + 1, text: lines[i].trim() });
+                }
+            }
+        }
+        return issues;
+    }
+
     /** 归一化文本（去注释/空白/大小写，仅保留 SQL 标记） */
     normalize(text) {
         return text
@@ -315,6 +330,7 @@ class TestRunner {
         detect('BETWEEN断裂', () => this.analyzer.detectBrokenBetween(formatted));
         detect('多语句合并', () => this.analyzer.detectMergedStatements(formatted));
         detect('分号注释合并', () => this.analyzer.detectCommentAfterSemicolon(formatted));
+        detect('行内注释断裂', () => this.analyzer.detectInlineCommentBreak(formatted));
 
         // 小写关键字
         const lowerKW = this.analyzer.detectLowerKeywords(formatted);

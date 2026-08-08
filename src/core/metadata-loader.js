@@ -414,14 +414,7 @@ function getCacheStats() {
 }
 
 module.exports = {
-    loadMetadata,          // 兼容旧接口
-    loadTableIndex,        // 只加载表名索引
-    loadTableColumns,      // 按需加载字段
-    loadTableColumnsBatch, // 批量加载字段
-    loadAllColumns,        // 全量字段索引
+    loadMetadata,      // 兼容旧接口
+    loadTableColumns,  // 按需加载字段
     clearCache,
-    configure,
-    getCacheStats,
-    findMetadataDir,       // 兼容
-    readCSV,               // 兼容
 };

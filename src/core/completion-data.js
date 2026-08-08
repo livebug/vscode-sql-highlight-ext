@@ -569,10 +569,6 @@ function getCurrentWord(textBeforeCursor) {
 }
 
 module.exports = {
-    SQL_KEYWORD_GROUPS,
-    SQL_FUNCTIONS,
-    SQL_DATA_TYPES,
-    SQL_SNIPPETS,
     createKeywordItems,
     createFunctionItems,
     createTypeItems,

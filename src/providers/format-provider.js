@@ -107,4 +107,4 @@ function createFormatProvider(lang) {
     };
 }
 
-module.exports = { createFormatProvider, detectBaseIndent };
+module.exports = { createFormatProvider };

@@ -265,7 +265,7 @@ function formatAndList(kw, content, andIndent, opts) {
 // ======================== 逗号/AND 分割 ========================
 function splitComma(text) { const r=[]; let d=0,cur=''; for (const ch of text) { if (ch==='(') d++; else if (ch===')') d--; if (ch===','&&d===0) { r.push(cur); cur=''; } else cur+=ch; } if (cur.trim()) r.push(cur); return r; }
 
-function splitAndOr(text) { const r=[]; let last=0; const re=/\b(AND|OR|BETWEEN)\b/gi; let m, inBetween=false; while ((m=re.exec(text))!==null) { let d=0; for (let i=last; i<m.index; i++) { if (text[i]==='(') d++; else if (text[i]===')') d--; } if (d===0) { const kw=m[1].toUpperCase(); if (kw==='BETWEEN') { inBetween=true; continue; } if (inBetween && kw==='AND') { inBetween=false; continue; } r.push(text.slice(last, m.index)); last=m.index+m[0].length; inBetween=false; } } r.push(text.slice(last)); return r.filter(s=>s.trim()); }
+function splitAndOr(text) { return splitAndOrWithOps(text).map(p => p.text); }
 
 // 拆分 AND/OR 并保留连接词（连接词属于其后一段；BETWEEN 的 AND 不拆分）
 function splitAndOrWithOps(text) {
@@ -545,16 +545,22 @@ function protectNestedCases(text) {
 }
 
 // 查找目标关键字（跳过括号内），返回 {kw, index}
+// 用全局正则迭代候选位置 + 光标累积括号深度，避免逐字符 slice+match（O(n²) → O(n)）
 function findKwIn(t, from, re) {
-    let depth = 0;
-    for (let i = from; i < t.length; i++) {
-        const c = t[i];
-        if (c === '(') { depth++; continue; }
-        if (c === ')') { depth = Math.max(0, depth - 1); continue; }
-        if (depth === 0) {
-            const m = t.slice(i).match(re);
-            if (m && m.index === 0) return { kw: m[0].toUpperCase(), index: i };
+    let flags = re.flags;
+    if (flags.indexOf('g') < 0) flags += 'g';
+    const gre = new RegExp(re.source, flags);
+    gre.lastIndex = from;
+    let depth = 0, cursor = from, m;
+    while ((m = gre.exec(t)) !== null) {
+        // 累积从 cursor 到匹配位置的括号深度（每字符只访问一次）
+        for (let i = cursor; i < m.index; i++) {
+            if (t[i] === '(') depth++;
+            else if (t[i] === ')') depth = Math.max(0, depth - 1);
         }
+        cursor = m.index + m[0].length;
+        if (depth === 0) return { kw: m[0].toUpperCase(), index: m.index };
+        gre.lastIndex = cursor;
     }
     return null;
 }
