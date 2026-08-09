@@ -35,7 +35,7 @@ function restore(sql) {
         storeC.forEach((v, i) => doReplace('__C' + i + '__', v));
         storeS.forEach((v, i) => doReplace('__S' + i + '__', v));
         storeV.forEach((v, i) => doReplace('__V' + i + '__', v));
-        storeO.forEach((v, i) => doReplace('__O' + i + '__', uppercase(v.replace(/^\s*\(/, ' ('))));
+        storeO.forEach((v, i) => doReplace('__O' + i + '__', v.replace(/^\s*\(/, ' (')));
         if (!changed) break;
     }
     return r;
@@ -67,7 +67,7 @@ function protectCase(sql) {
     storeK=[]; ciK=0;
     let r='', i=0;
     while (i < sql.length) {
-        const m = sql.slice(i).match(/\bCASE\b/);
+        const m = sql.slice(i).match(/\bCASE\b/i);
         if (!m) { r += sql.slice(i); break; }
         const caseStart = i + m.index;
         // 限定标识符（如 t.case）不是 CASE 关键字，跳过
@@ -75,7 +75,7 @@ function protectCase(sql) {
         // 深度配对找匹配的 END（忽略括号，嵌套 CASE 整体包含）
         let caseDepth = 1, j = caseStart + 4, endPos = -1;
         while (j < sql.length) {
-            const e = sql.slice(j).match(/\b(CASE|END)\b/);
+            const e = sql.slice(j).match(/\b(CASE|END)\b/i);
             if (!e) break;
             const kw = e[0].toUpperCase();
             const idx = j + e.index;
@@ -97,11 +97,41 @@ function protectCase(sql) {
 // ======================== 关键字 ========================
 const KEYWORDS = require('./keywords');
 
-function uppercase(sql) {
+/**
+ * 关键字大小写转换（跳过保护占位符）。
+ *  keywordCase: 'upper' 大写（默认）| 'lower' 小写 | 'preserve' 不转换
+ * 注意：管线内部（CASE 配对等）依赖关键字匹配，早 pass 对 upper/lower 都按大写走；
+ *  'lower' 的统一小写由末尾 applyKeywordCaseFinal 完成，保证字符串与注释不受影响。
+ */
+function applyKeywordCase(sql, keywordCase) {
+    if (keywordCase === 'preserve') return sql;
+    const toLower = keywordCase === 'lower';
     return sql.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (m) => {
         if (/^__[VCSO]\d+__$/.test(m)) return m;
-        const u = m.toUpperCase(); return KEYWORDS.has(u) ? u : m;
+        const u = m.toUpperCase();
+        if (!KEYWORDS.has(u)) return m;
+        return toLower ? u.toLowerCase() : u;
     });
+}
+
+/**
+ * 晚 pass：仅 keywordCase='lower' 时对最终输出统一小写关键字。
+ * 字符串 / 注释 / ${变量} 先占位保护再恢复，保证其内容不被改写。
+ */
+function applyKeywordCaseFinal(sql, keywordCase) {
+    if (keywordCase !== 'lower') return sql;
+    const sStore = [], cStore = [], vStore = [];
+    let si = 0, ci = 0, vi = 0;
+    let w = sql;
+    w = w.replace(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}/g, m => { vStore.push(m); return '__V'+(vi++)+'__'; });
+    w = w.replace(/'([^'\n]|'')*'/g, m => { sStore.push(m); return '__S'+(si++)+'__'; });
+    w = w.replace(/--[^\n]*/g, m => { cStore.push(m); return '__C'+(ci++)+'__'; });
+    w = w.replace(/\/\*[\s\S]*?\*\//g, m => { cStore.push(m); return '__C'+(ci++)+'__'; });
+    w = applyKeywordCase(w, 'lower');
+    for (let i = 0; i < cStore.length; i++) w = w.split('__C' + i + '__').join(cStore[i]);
+    for (let i = 0; i < sStore.length; i++) w = w.split('__S' + i + '__').join(sStore[i]);
+    for (let i = 0; i < vStore.length; i++) w = w.split('__V' + i + '__').join(vStore[i]);
+    return w;
 }
 
 // ======================== JOIN 对齐追踪 ========================
@@ -650,13 +680,14 @@ function formatSingleSQL(sql, options) {
     });
     // 横向空白压缩，但保留换行（注释边界需要）
     w = w.replace(/[ \t]+/g, ' ').trim();
-    w = uppercase(w);
+    w = applyKeywordCase(w, (opts.keywordCase === 'preserve') ? 'preserve' : 'upper');
     w = protectOver(w);
     w = protectCase(w);          // CASE...END → __K 占位符
     w = formatTop(w, opts);
     w = restore(w);
     w = expandAllCases(w, opts); // __K → 格式化好的多行 CASE 块
     w = restore(w);              // 恢复块内残留的字符串/注释/OVER 占位符
+    w = applyKeywordCaseFinal(w, opts.keywordCase); // 晚 pass：lower 统一小写（跳过字符串/注释）
     return w;
 }
 
@@ -811,7 +842,7 @@ function protectNestedCases(text) {
     const store = [];
     let r = 'CASE', i = 4, caseDepth = 1;
     while (i < text.length) {
-        const m = text.slice(i).match(/\b(CASE|END)\b/);
+        const m = text.slice(i).match(/\b(CASE|END)\b/i);
         if (!m) { r += text.slice(i); break; }
         const kw = m[0].toUpperCase();
         const idx = i + m.index;
@@ -822,7 +853,7 @@ function protectNestedCases(text) {
             const innerStart = idx;
             let d2 = 1, j2 = idx + 4, end2 = -1;
             while (j2 < text.length) {
-                const e = text.slice(j2).match(/\b(CASE|END)\b/);
+                const e = text.slice(j2).match(/\b(CASE|END)\b/i);
                 if (!e) break;
                 const k2 = e[0].toUpperCase(); const i2 = j2 + e.index;
                 if (text[i2 - 1] === '.') { j2 = i2 + k2.length; continue; }
@@ -874,22 +905,22 @@ function findKwIn(t, from, re) {
 
 // 解析 CASE 分支（内层 CASE 已保护为 __L）：返回 {expr, branches, elseVal}
 function splitCaseBranches(t) {
-    const firstWhen = findKwIn(t, 4, /\bWHEN\b/);
+    const firstWhen = findKwIn(t, 4, /\bWHEN\b/i);
     if (!firstWhen) return { expr: '', branches: [], elseVal: null };
     const expr = t.slice(4, firstWhen.index).trim();
     const branches = [];
     let pos = firstWhen.index, elseVal = null;
     for (;;) {
-        const then = findKwIn(t, pos + 4, /\bTHEN\b/);
+        const then = findKwIn(t, pos + 4, /\bTHEN\b/i);
         if (!then) break;
         const cond = t.slice(pos + 4, then.index).trim();
-        const nxt = findKwIn(t, then.index + 4, /\b(WHEN|ELSE|END)\b/);
+        const nxt = findKwIn(t, then.index + 4, /\b(WHEN|ELSE|END)\b/i);
         if (!nxt) break;
         const val = t.slice(then.index + 4, nxt.index).trim();
         branches.push({ cond, val });
         if (nxt.kw === 'WHEN') { pos = nxt.index; continue; }
         if (nxt.kw === 'ELSE') {
-            const endAt = findKwIn(t, nxt.index + 4, /\bEND\b/);
+            const endAt = findKwIn(t, nxt.index + 4, /\bEND\b/i);
             elseVal = endAt ? t.slice(nxt.index + 4, endAt.index).trim() : null;
             break;
         }

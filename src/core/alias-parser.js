@@ -24,6 +24,52 @@ function cleanText(text) {
 }
 
 /**
+ * 判断位置是否位于注释、字符串或 ${变量} 内部
+ *
+ * 用途：hover / 定义跳转 不应在注释/字符串内触发（例如注释里恰好出现与
+ * 别名同名的单词，如 `--800_B_CDINFO_D` 里的 B，不应跳转到别名定义）。
+ *
+ * 用轻量状态机从文档头扫到光标偏移（O(n) 线性扫描，无正则回溯）。
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {boolean}
+ */
+function isPositionInCommentOrString(document, position) {
+    const text = document.getText();
+    const offset = document.offsetAt(position);
+    // 0 普通 / 1 行注释 / 2 块注释 / 3 字符串 / 4 ${变量}
+    let state = 0, i = 0;
+    while (i < offset) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (state === 0) {
+            if (ch === '-' && next === '-') { state = 1; i += 2; }
+            else if (ch === '/' && next === '*') { state = 2; i += 2; }
+            else if (ch === "'") { state = 3; i++; }
+            else if (ch === '$' && next === '{') { state = 4; i += 2; }
+            else i++;
+        } else if (state === 1) {
+            if (ch === '\n') state = 0;
+            i++;
+        } else if (state === 2) {
+            if (ch === '*' && next === '/') { state = 0; i += 2; }
+            else i++;
+        } else if (state === 3) {
+            if (ch === "'") {
+                if (next === "'") { i += 2; }          // '' 转义
+                else { state = 0; i++; }
+            } else if (ch === '\n') { state = 0; i++; } // 字符串不跨行
+            else i++;
+        } else if (state === 4) {
+            if (ch === '}') { state = 0; i++; }
+            else i++;
+        }
+    }
+    return state !== 0;
+}
+
+/**
  * 解析文档中所有表别名定义（按 uri+version 缓存）
  * 返回 Map: 别名(小写) → { tableName, tableRange, aliasRange, hasAS }
  * 支持: FROM table_name alias, JOIN table_name AS alias
@@ -125,4 +171,4 @@ function computeCreateTableDefs(document) {
     return defs;
 }
 
-module.exports = { parseAliasDefinitions, parseCreateTableDefs, KEYWORDS };
+module.exports = { parseAliasDefinitions, parseCreateTableDefs, isPositionInCommentOrString, KEYWORDS };

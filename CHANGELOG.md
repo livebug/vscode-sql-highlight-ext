@@ -6,6 +6,15 @@
 
 ## 版本历史
 
+### v0.9.6
+- **feat: `keywordCase` 配置真正生效（默认大写）** — 之前为死配置（upper/lower/preserve 输出相同）：
+  - `upper`（默认）：关键字统一大写
+  - `lower`：关键字统一小写
+  - `preserve`：不强制转换（结构关键字维持大写规范）
+  - 字符串与注释内容始终不参与大小写转换（占位符保护，还原后原样）
+  - 管线内 CASE/WHEN/THEN/END 等匹配改为大小写不敏感，兼容小写输入
+- **fix: 表别名跳转/悬浮不再在注释或字符串内触发** — 注释里出现与别名同名的单词（如 `--800_B_CDINFO_D` 里的 `B`）不再误跳转/误悬浮
+
 ### v0.9.5
 - **fix: 修复表别名跳转失效（doc-cache 共享 key 覆盖）** — 新增文档解析缓存后，不同解析结果（表扫描 / 别名 / CREATE TABLE / CTE）共用同一 `uri+version` key，扩展激活后 `refreshDepsView` 先写入表扫描结果，导致后续 hover / F12 的别名解析取回错误类型数据、`aliasMap.get()` 返回 undefined、别名跳转失效。修复：`getCached` 增加 `namespace` 参数，各调用方使用独立命名空间
 - **fix: doc-cache 增加文档实例校验** — 仅凭 version 失效存在盲区：文档从未编辑时 version 不增长，关闭后磁盘内容被外部修改再重开，新文档 version 相同会命中旧缓存。现在命中时同时校验 `entry.doc === document`（重开是新实例必然失效）

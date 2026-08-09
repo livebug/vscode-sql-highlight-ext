@@ -5,12 +5,15 @@
 
 const vscode = require('vscode');
 const logger = require('../logger');
-const { parseAliasDefinitions, parseCreateTableDefs } = require('../core/alias-parser');
+const { parseAliasDefinitions, parseCreateTableDefs, isPositionInCommentOrString } = require('../core/alias-parser');
 
 /**
  * Definition: F12 / Ctrl+Click 跳转到别名定义处
  */
 function provideAliasDefinition(document, position) {
+    // 注释/字符串内不触发跳转（注释里同名单词不应跳转）
+    if (isPositionInCommentOrString(document, position)) return null;
+
     const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
 
@@ -35,6 +38,9 @@ function provideAliasDefinition(document, position) {
  * Definition: F12 / Ctrl+Click 跳转到 CREATE TABLE 定义
  */
 function provideTableDefinition(document, position) {
+    // 注释/字符串内不触发跳转
+    if (isPositionInCommentOrString(document, position)) return null;
+
     const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
     const word = document.getText(wordRange);

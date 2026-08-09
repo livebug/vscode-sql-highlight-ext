@@ -5,12 +5,15 @@
 
 const vscode = require('vscode');
 const logger = require('../logger');
-const { parseAliasDefinitions, parseCreateTableDefs } = require('../core/alias-parser');
+const { parseAliasDefinitions, parseCreateTableDefs, isPositionInCommentOrString } = require('../core/alias-parser');
 
 /**
  * Hover: 悬浮在表别名上 → 显示原表名
  */
 function provideAliasHover(document, position) {
+    // 注释/字符串内不触发悬浮
+    if (isPositionInCommentOrString(document, position)) return null;
+
     const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
 
@@ -41,6 +44,9 @@ function provideAliasHover(document, position) {
  * Hover: 悬浮在表名上 → 如果是 CREATE TABLE 定义的，显示定义摘要
  */
 function provideTableHover(document, position) {
+    // 注释/字符串内不触发悬浮
+    if (isPositionInCommentOrString(document, position)) return null;
+
     const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_.\u4e00-\u9fa5]*/);
     if (!wordRange) return null;
     const word = document.getText(wordRange);
