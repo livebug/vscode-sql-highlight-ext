@@ -6,6 +6,12 @@
 
 ## 版本历史
 
+### v0.9.5
+- **fix: 修复表别名跳转失效（doc-cache 共享 key 覆盖）** — 新增文档解析缓存后，不同解析结果（表扫描 / 别名 / CREATE TABLE / CTE）共用同一 `uri+version` key，扩展激活后 `refreshDepsView` 先写入表扫描结果，导致后续 hover / F12 的别名解析取回错误类型数据、`aliasMap.get()` 返回 undefined、别名跳转失效。修复：`getCached` 增加 `namespace` 参数，各调用方使用独立命名空间
+- **fix: doc-cache 增加文档实例校验** — 仅凭 version 失效存在盲区：文档从未编辑时 version 不增长，关闭后磁盘内容被外部修改再重开，新文档 version 相同会命中旧缓存。现在命中时同时校验 `entry.doc === document`（重开是新实例必然失效）
+- **perf: 高频路径接入文档版本缓存** — hover / 定义跳转 / 补全 / 依赖视图的别名、CREATE TABLE、表扫描、CTE 解析按 `uri+version+namespace` 缓存（上限 50 条、自动淘汰），文档未编辑时避免重复全量扫描
+- **perf: 括号配对只扫光标一侧文本** — `CASE↔END` / `WHEN↔THEN` 匹配从"全文档扫描"改为"从光标位置向两侧扫描"
+
 ### v0.9.4
 - **fix: 子查询块缩进改为相对 `(` 所在列** — 修复嵌套字段（如 `nvl((SELECT ... LIMIT 1), 'xxx') AS ISSUE_NAME`）展开为多行时，子查询内部行与 `)` 落在错误列（固定 4 空格、`)` 在列 0）的问题：
   - `formatSubqueryContent`/`formatInParenContent` 新增 `base`（内容起始列）参数，子查询块缩进 = `base + '('偏移 + indentSize`，`)` 对齐 `(`
