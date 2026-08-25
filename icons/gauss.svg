@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- GaussDB 文件图标：浅橙底 + 数据库圆柱装饰 + G 字样 -->
+  <rect x="3" y="3" width="26" height="26" rx="5" fill="#fff7ed" stroke="#c2410c" stroke-width="1.6"/>
+  <!-- 背景：数据库圆柱（淡橙） -->
+  <ellipse cx="16" cy="11.5" rx="8.5" ry="2.6" fill="none" stroke="#fdba74" stroke-width="1.4"/>
+  <path d="M7.5 11.5v9c0 1.5 3.8 2.6 8.5 2.6s8.5-1.1 8.5-2.6v-9" fill="none" stroke="#fdba74" stroke-width="1.4"/>
+  <!-- G 字样（GaussDB 首字母） -->
+  <path d="M21.5 12.5 A5.5 5.5 0 1 0 21.5 19.5 H17.5 V16" fill="none" stroke="#c2410c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

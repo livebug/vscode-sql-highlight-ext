@@ -1,0 +1,20 @@
+{
+  "iconDefinitions": {
+    "_tdh": { "iconPath": "./icons/tdh.svg" },
+    "_gauss": { "iconPath": "./icons/gauss.svg" }
+  },
+  "fileExtensions": {
+    "tdhsql": "_tdh",
+    "tdh.sql": "_tdh",
+    "gaussql": "_gauss",
+    "gauss.sql": "_gauss"
+  },
+  "fileNames": {
+    "tdh.sql": "_tdh",
+    "gauss.sql": "_gauss"
+  },
+  "languageIds": {
+    "sql-tdh": "_tdh",
+    "sql-gaussdb": "_gauss"
+  }
+}

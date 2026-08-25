@@ -2,8 +2,9 @@
     "name": "sql-dialect-highlight",
     "displayName": "SQL Dialect Highlight (TDH & GaussDB)",
     "description": "为 TDH（星环）和 GaussDB（高斯）数据库提供 SQL 语法高亮与格式化",
-    "version": "0.9.6",
+    "version": "0.9.7",
     "publisher": "sql-dialect-publisher",
+    "icon": "icon.png",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -21,6 +22,13 @@
         "onLanguage:sql-gaussdb"
     ],
     "contributes": {
+        "iconThemes": [
+            {
+                "id": "sql-dialect-icon-theme",
+                "label": "SQL Dialect Highlight 文件图标",
+                "path": "./themes/sql-dialect-icon-theme.json"
+            }
+        ],
         "languages": [
             {
                 "id": "sql-tdh",
@@ -33,6 +41,7 @@
                     ".tdhsql",
                     ".tdh.sql"
                 ],
+                "firstLine": "^\\s*--\\s*(@dialect\\s*:\\s*tdh|tdh\\s*sql)",
                 "configuration": "./language-configuration.json"
             },
             {
@@ -46,6 +55,7 @@
                     ".gaussql",
                     ".gauss.sql"
                 ],
+                "firstLine": "^\\s*--\\s*(@dialect\\s*:\\s*gauss|gaussdb\\s*sql)",
                 "configuration": "./language-configuration.json"
             }
         ],
@@ -114,6 +124,11 @@
                         "error"
                     ],
                     "description": "日志级别（debug/info/warn/error）"
+                },
+                "sqlDialectHighlight.dirDialects": {
+                    "type": "object",
+                    "default": {},
+                    "description": "目录方言配置：目录路径(相对工作区) -> tdh/gauss。该目录下的 .sql 文件自动按指定方言处理。例：{\"etl/tdh\": \"tdh\", \"etl/gauss\": \"gauss\"}"
                 },
                 "sqlDialectHighlight.metadata.maxCacheSize": {
                     "type": "number",

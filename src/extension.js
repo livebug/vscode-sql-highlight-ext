@@ -160,8 +160,95 @@ function activate(context) {
         );
     });
 
+    // ========== 7. 方言自动识别（.sql 内容特征 → 自动切换 TDH/GaussDB） ==========
+    registerDialectAutoDetect(context);
+
     logger.info('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
     vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
+}
+
+/**
+ * 方言自动识别：打开普通 .sql 文件时，按内容特征自动判断 TDH 还是 GaussDB，
+ * 并切换语言（语法高亮 + 文件图标随之生效）。
+ */
+const DIALECT_RULES = [
+    {
+        lang: 'sql-tdh',
+        patterns: [
+            /^\s*--\s*(@dialect\s*:\s*tdh|tdh\s*sql)/i,
+            /\b(ADD JAR|INCEPTOR|LATERAL VIEW|TRANSACTIONAL|SHOW CREATE TABLE|CLUSTER BY|DISTRIBUTE BY|STORED AS ORC|hive\.|set\s+hive\.)/i
+        ]
+    },
+    {
+        lang: 'sql-gaussdb',
+        patterns: [
+            /^\s*--\s*(@dialect\s*:\s*gauss|gaussdb\s*sql)/i,
+            /\b(SET search_path|pg_catalog|information_schema|ON CONFLICT|RETURNING|::\w+|SERIAL|BIGSERIAL)\b/i
+        ]
+    }
+];
+
+function detectDialect(text) {
+    for (const rule of DIALECT_RULES) {
+        if (rule.patterns.some(p => p.test(text))) {
+            return rule.lang;
+        }
+    }
+    return null;
+}
+
+function registerDialectAutoDetect(context) {
+    async function autoDetect(document) {
+        if (!document) return;
+        // 只处理普通 SQL / 纯文本（已明确 .tdhsql/.gaussql 的跳过）
+        if (document.languageId !== 'sql' && document.languageId !== 'plaintext') return;
+        const text = document.getText();
+        if (text.length > 200000) return; // 超大文件跳过
+        // 1. 目录配置优先：配置的目录强制指定方言
+        const dirLang = dirDialectFor(document);
+        if (dirLang && document.languageId !== dirLang) {
+            try {
+                await vscode.languages.setTextDocumentLanguage(document, dirLang);
+                logger.info('[方言识别] ' + document.fileName + ' → ' + dirLang + '（目录配置）');
+            } catch (e) {
+                logger.warn('[方言识别] 切换失败: ' + e.message);
+            }
+            return;
+        }
+        // 2. 内容特征识别
+        const lang = detectDialect(text);
+        if (lang && document.languageId !== lang) {
+            try {
+                await vscode.languages.setTextDocumentLanguage(document, lang);
+                logger.info('[方言识别] ' + document.fileName + ' → ' + lang);
+            } catch (e) {
+                logger.warn('[方言识别] 切换失败: ' + e.message);
+            }
+        }
+    }
+
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(autoDetect),
+        vscode.window.onDidChangeActiveTextEditor(ed => autoDetect(ed && ed.document))
+    );
+}
+
+/**
+ * 目录方言配置：sqlDialectHighlight.dirDialects = { "etl/tdh": "tdh", "etl/gauss": "gauss" }
+ * 匹配目录（路径包含即命中）→ 强制使用对应方言。
+ */
+function dirDialectFor(document) {
+    const cfg = vscode.workspace.getConfiguration('sqlDialectHighlight');
+    const dirs = cfg.get('dirDialects') || {};
+    const fsPath = document.uri.fsPath.replace(/\\/g, '/');
+    for (const dir of Object.keys(dirs)) {
+        if (dir && fsPath.includes(dir.replace(/\\/g, '/'))) {
+            const v = String(dirs[dir]).toLowerCase();
+            if (v === 'tdh') return 'sql-tdh';
+            if (v === 'gauss' || v === 'gaussdb') return 'sql-gaussdb';
+        }
+    }
+    return null;
 }
 
 /**

@@ -6,6 +6,11 @@
 
 ## 版本历史
 
+### v0.9.7
+- **feat: 扩展图标 + 文件图标主题** — 新增编辑器窗口风格扩展图标（icon.png）；新增文件图标主题 `sql-dialect-icon-theme`（TDH 蓝色星环 / GaussDB 橙色数据库圆柱，按扩展名或语言匹配）
+- **feat: 方言三重自动识别** — ①扩展名（.tdhsql/.gaussql）②文件头标记（`-- @dialect: tdh|gauss`，firstLine）③内容特征（.sql 文件按 TDH/Hive 或 GaussDB/PG 关键字自动判断并切换语言）
+- **feat: 目录级方言配置** — 新增 `sqlDialectHighlight.dirDialects` 配置，指定目录下的 .sql 文件强制按 tdh/gauss 处理（优先级：扩展名 > 目录配置 > 文件头 > 内容特征）
+
 ### v0.9.6
 - **feat: `keywordCase` 配置真正生效（默认大写）** — 之前为死配置（upper/lower/preserve 输出相同）：
   - `upper`（默认）：关键字统一大写

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- TDH 文件图标：浅蓝底 + 星环装饰 + W 字样 -->
+  <rect x="3" y="3" width="26" height="26" rx="5" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.6"/>
+  <ellipse cx="16" cy="15.5" rx="11" ry="4" fill="none" stroke="#60a5fa" stroke-width="1.1" transform="rotate(-18 16 15.5)"/>
+  <!-- W 字样（Transwarp 首字母，端点朝下、双峰朝上的标准 W，加粗清晰） -->
+  <path d="M10 22 L13.5 11 L16 21 L18.5 11 L21.5 21.5" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
