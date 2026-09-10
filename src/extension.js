@@ -163,6 +163,9 @@ function activate(context) {
     // ========== 7. 方言自动识别（.sql 内容特征 → 自动切换 TDH/GaussDB） ==========
     registerDialectAutoDetect(context);
 
+    // ========== 8. TDH/GaussDB 文件图标叠加（FileDecorationProvider，不影响其他图标） ==========
+    registerFileIconProvider(context);
+
     logger.info('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
     vscode.window.showInformationMessage('SQL Dialect Highlight 已激活 (TDH & GaussDB)');
 }
@@ -249,6 +252,25 @@ function dirDialectFor(document) {
         }
     }
     return null;
+}
+
+function registerFileIconProvider(context) {
+    const tdhIcon = vscode.Uri.file(context.extensionPath + '/icons/tdh.svg');
+    const gaussIcon = vscode.Uri.file(context.extensionPath + '/icons/gauss.svg');
+    const provider = {
+        provideFileDecoration(uri) {
+            const p = uri.fsPath.toLowerCase();
+            if (p.endsWith('.tdhsql') || p.endsWith('.tdh.sql')) {
+                return { iconPath: tdhIcon };
+            }
+            if (p.endsWith('.gaussql') || p.endsWith('.gauss.sql')) {
+                return { iconPath: gaussIcon };
+            }
+            return undefined; // 其他文件不动，沿用当前图标主题
+        }
+    };
+    context.subscriptions.push(vscode.window.registerFileDecorationProvider(provider));
+    logger.info('[文件图标] TDH/GaussDB 图标叠加已注册');
 }
 
 /**
